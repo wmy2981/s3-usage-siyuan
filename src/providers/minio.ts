@@ -58,7 +58,7 @@ function parseMinioUsage(body: string, bucket: string): BucketUsage {
         storageBytes: entry.size ?? sizeFallback,
         objectCount: entry.objectsCount,
         dataTime: Number.isFinite(dataTime) ? dataTime : undefined,
-        notes: ["noteMinioRealtime", "noteQuota"],
+        notes: ["noteMinioRealtime"],
     };
 }
 

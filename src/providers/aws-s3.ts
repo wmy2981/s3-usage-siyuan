@@ -150,15 +150,13 @@ export const awsS3: ProviderDefinition = {
             }
         }
         const objects = await getMetric(ctx, ctx.bucket, "NumberOfObjects", "AllStorageTypes", "Count");
-        if (hasStorage) {
-            dataTime = Math.max(dataTime, objects.timestamp ?? 0);
-        }
+        dataTime = Math.max(dataTime, objects.timestamp ?? 0);
         return {
             storageBytes: hasStorage ? storageBytes : undefined,
             objectCount: objects.value,
             storageClasses: classes,
             dataTime: dataTime > 0 ? dataTime : undefined,
-            notes: ["noteAwsDaily", "noteQuota"],
+            notes: ["noteAwsDaily", "noteAwsScope"],
         };
     },
 };

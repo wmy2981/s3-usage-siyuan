@@ -118,5 +118,6 @@
   "noteAwsDaily": "CloudWatch 每天发布一次桶大小，不含请求指标。",
   "noteCosUnit": "存储值已从 MB 换算为字节。",
   "noteQuota": "计费口径请以服务商账单为准。",
-  "noteR2Daily": "请求数与流量为最近 24 小时的合计。"
+  "noteR2Daily": "请求数与流量为最近 24 小时的合计。",
+  "noteAwsScope": "总量为主存储类之和，不含 overhead 与分片暂存等附加项。"
 }

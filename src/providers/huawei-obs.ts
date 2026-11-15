@@ -33,7 +33,7 @@ function parseStorageInfo(body: string): BucketUsage {
         storageBytes: numberAt(root, "Size"),
         objectCount: numberAt(root, "ObjectNumber"),
         storageClasses: classes,
-        notes: ["noteObsDelay", "noteQuota"],
+        notes: ["noteObsDelay"],
     };
 }
 

@@ -209,7 +209,7 @@ export const tencentCos: ProviderDefinition = {
             requestCount: requests.value,
             storageClasses: classes,
             dataTime: dataTime > 0 ? dataTime : undefined,
-            notes: ["noteCosDelay", "noteCosUnit", "noteQuota"],
+            notes: ["noteCosDelay"],
         };
     },
 };

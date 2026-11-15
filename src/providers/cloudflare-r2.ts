@@ -48,7 +48,7 @@ function firstAccount(payload: unknown): unknown {
 export function parseR2Usage(payload: unknown): BucketUsage {
     const account = firstAccount(payload);
     if (!account || typeof account !== "object") {
-        return {notes: ["noteR2Range", "noteR2Daily", "noteQuota"]};
+        return {notes: ["noteR2Range", "noteR2Daily"]};
     }
     const storage = jsonPath(account, "r2StorageAdaptiveGroups");
     const storageRow = Array.isArray(storage) ? storage[0] : undefined;
@@ -97,7 +97,7 @@ export function parseR2Usage(payload: unknown): BucketUsage {
         trafficInBytes: hasTraffic ? trafficInBytes : undefined,
         trafficOutBytes: hasTraffic ? trafficOutBytes : undefined,
         dataTime: typeof datetime === "string" ? Date.parse(datetime) : undefined,
-        notes: ["noteR2Range", "noteR2Daily", "noteQuota"],
+        notes: ["noteR2Range", "noteR2Daily"],
     };
 }
 

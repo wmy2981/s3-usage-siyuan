@@ -40,7 +40,7 @@ function parseStat(body: string): BucketUsage {
         multipartCount: numberAt(root, "MultipartUploadCount"),
         storageClasses: classes,
         dataTime: lastModified && lastModified > 0 ? lastModified * 1000 : undefined,
-        notes: ["noteOssDelay", "noteQuota"],
+        notes: ["noteOssDelay"],
     };
 }
 

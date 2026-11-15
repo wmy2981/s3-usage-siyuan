@@ -205,7 +205,7 @@ export const qiniuKodo: ProviderDefinition = {
                 (item.storageBytes ?? 0) > 0 || (item.objectCount ?? 0) > 0
             ),
             dataTime: dataTime > 0 ? dataTime : undefined,
-            notes: ["noteQiniuDelay", "noteQuota"],
+            notes: ["noteQiniuDelay"],
         };
     },
 };

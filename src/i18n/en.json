@@ -118,5 +118,6 @@
   "noteAwsDaily": "CloudWatch publishes bucket size once per day; request metrics are not included.",
   "noteCosUnit": "Storage values are converted from MB to bytes.",
   "noteQuota": "The provider's billing statement is the authoritative source.",
-  "noteR2Daily": "Request count and traffic are totals for the last 24 hours."
+  "noteR2Daily": "Request count and traffic are totals for the last 24 hours.",
+  "noteAwsScope": "Totals sum the main storage classes; overhead and staging filters are excluded."
 }

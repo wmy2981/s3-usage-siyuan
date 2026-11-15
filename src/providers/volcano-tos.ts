@@ -52,7 +52,7 @@ function parseTosStat(body: string): BucketUsage {
         objectCount: numberAt(total, "ObjectCount") ??
             classes.reduce((sum, item) => sum + (item.objectCount ?? 0), 0),
         storageClasses: classes,
-        notes: ["noteTosDelay", "noteQuota"],
+        notes: ["noteTosDelay"],
     };
 }
 
