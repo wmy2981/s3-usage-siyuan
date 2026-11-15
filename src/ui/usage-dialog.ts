@@ -442,13 +442,10 @@ export class UsageDialog {
             content.append(form.element);
         }
 
-        const note = el("div", "s3u__settings-note", this.t("settingsNote"));
-        content.append(note);
-        this.root.append(content);
-
         const encryption = el("div", "s3u__encryption-note",
             this.t(canEncrypt() ? "sourceEncryptionReady" : "sourceEncryptionDisabled"));
-        this.root.append(encryption);
+        content.append(encryption);
+        this.root.append(content);
     }
 
     private async persistSource(source: DataSource): Promise<void> {
