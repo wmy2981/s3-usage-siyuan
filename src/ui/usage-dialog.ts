@@ -45,6 +45,7 @@ export class UsageDialog {
     private dialog?: Dialog;
     private root?: HTMLElement;
     private view: "usage" | "sources" = "usage";
+    private renderedView?: "usage" | "sources";
     private results = new Map<string, BucketResult>();
     private editing?: DataSource;
     private adding = false;
@@ -92,6 +93,8 @@ export class UsageDialog {
         if (!this.root) {
             return;
         }
+        // 新对话框从空白开始，重新播一次正文入场动画
+        this.renderedView = undefined;
         // 入场前就把每张卡片搭成骨架，查询结果只替换单张卡片，避免入场期间重排整棵正文
         const needsQuery = this.view === "usage" && this.results.size === 0;
         if (needsQuery) {
@@ -127,15 +130,26 @@ export class UsageDialog {
         if (!this.root) {
             return;
         }
+        // 只有切页（含首次打开）播入场动画；同一视图内的重绘保持静止，避免每次点按都闪一下
+        const switching = this.renderedView !== this.view;
+        this.renderedView = this.view;
         clear(this.root);
         if (this.view === "sources") {
-            this.renderSources();
+            this.renderSources(switching);
         } else {
-            this.renderUsage();
+            this.renderUsage(switching);
         }
     }
 
-    private renderUsage(): void {
+    /** 给视图正文加进入动画，调用方只在切页时传 true。 */
+    private entering(node: HTMLElement, animate: boolean): HTMLElement {
+        if (animate) {
+            node.classList.add("s3u__enter");
+        }
+        return node;
+    }
+
+    private renderUsage(animate = false): void {
         if (!this.root) {
             return;
         }
@@ -158,7 +172,7 @@ export class UsageDialog {
         this.root.append(toolbar);
 
         if (this.settings.sources.length === 0) {
-            this.root.append(this.emptyState());
+            this.root.append(this.entering(this.emptyState(), animate));
             return;
         }
 
@@ -166,7 +180,7 @@ export class UsageDialog {
         for (const source of this.settings.sources) {
             content.append(this.sourceSection(source));
         }
-        this.root.append(content);
+        this.root.append(this.entering(content, animate));
     }
 
     private emptyState(): HTMLElement {
@@ -382,7 +396,7 @@ export class UsageDialog {
         return translated === key ? item.name : translated;
     }
 
-    private renderSources(): void {
+    private renderSources(animate = false): void {
         if (!this.root) {
             return;
         }
@@ -452,7 +466,7 @@ export class UsageDialog {
         const encryption = el("div", "s3u__encryption-note",
             this.t(canEncrypt() ? "sourceEncryptionReady" : "sourceEncryptionDisabled"));
         content.append(encryption);
-        this.root.append(content);
+        this.root.append(this.entering(content, animate));
     }
 
     private async persistSource(source: DataSource): Promise<void> {
@@ -597,7 +611,11 @@ export class UsageDialog {
         }
         this.querying = true;
         this.prepareLoading();
-        this.renderUsageRootOnly();
+        // 正文刚由 render() 画成骨架时不再重建，保住切页的入场动画；
+        // 只有页面已经显示结果（手动刷新）时才需要换回骨架
+        if (this.root?.querySelector(".s3u__usage, .s3u__error")) {
+            this.renderUsageRootOnly();
+        }
         await this.runQueries();
     }
 

@@ -581,6 +581,55 @@
     text-wrap: pretty;
 }
 
+/* ---------- 过渡 ---------- */
+
+/*
+ * 只动 transform / opacity，不触发布局；曲线与宿主 --b3-transition 一致。
+ * 切页和表单展开位移 6px，卡片内容位移 3px，能察觉又不拖慢操作。
+ */
+@keyframes s3u-enter {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+}
+
+@keyframes s3u-rise {
+    from {
+        opacity: 0;
+        transform: translateY(3px);
+    }
+}
+
+.s3u__enter {
+    animation: s3u-enter 0.18s cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* 表单挂载、骨架换成结果、失败信息出现，都走这段淡入 */
+.s3u__editor,
+.s3u__usage,
+.s3u__error,
+.s3u__skeleton {
+    animation: s3u-rise 0.16s cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* details 展开是瞬时显示，补一段淡入，避免表格突然撑开 */
+.s3u__classes[open] .s3u__table {
+    animation: s3u-rise 0.16s cubic-bezier(0, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .s3u__enter,
+    .s3u__editor,
+    .s3u__usage,
+    .s3u__error,
+    .s3u__skeleton,
+    .s3u__classes[open] .s3u__table,
+    .s3u__skeleton-line {
+        animation: none;
+    }
+}
+
 @media (max-width: 560px) {
     .s3u-dialog .b3-dialog__content {
         max-height: 82vh;
