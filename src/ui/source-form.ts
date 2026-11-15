@@ -15,7 +15,7 @@ import {
 } from "../config";
 import type {T} from "../i18n";
 import {PROVIDER_META, PROVIDER_ORDER} from "../providers/meta";
-import {button, el, fieldRow} from "./dom";
+import {button, el, fieldRow, icon, iconButton} from "./dom";
 
 export interface SourceFormOptions {
     t: T;
@@ -84,6 +84,7 @@ export class SourceForm {
     private status!: HTMLElement;
     private saveButton!: HTMLButtonElement;
     private testButton!: HTMLButtonElement;
+    private testLabel!: HTMLElement;
 
     constructor(options: SourceFormOptions) {
         this.options = options;
@@ -205,7 +206,9 @@ export class SourceForm {
         const actions = el("div", "s3u__editor-actions");
         const cancel = button("b3-button b3-button--cancel", this.t("sourceCancel"));
         cancel.addEventListener("click", () => this.options.onCancel());
-        this.testButton = button("b3-button b3-button--outline", this.t("sourceTest"));
+        this.testButton = button("b3-button b3-button--outline", "");
+        this.testLabel = el("span", "", this.t("sourceTest"));
+        this.testButton.append(icon("iconLink"), this.testLabel);
         this.testButton.addEventListener("click", () => {
             void this.testConnection();
         });
@@ -357,7 +360,7 @@ export class SourceForm {
             return;
         }
         this.testButton.disabled = true;
-        this.testButton.textContent = this.t("sourceTesting");
+        this.testLabel.textContent = this.t("sourceTesting");
         this.showStatus(this.t("sourceTesting"), "info");
         try {
             const message = await this.options.onTest(source);
@@ -369,7 +372,7 @@ export class SourceForm {
             );
         } finally {
             this.testButton.disabled = false;
-            this.testButton.textContent = this.t("sourceTest");
+            this.testLabel.textContent = this.t("sourceTest");
         }
     }
 
@@ -401,9 +404,9 @@ export function renderSourceList(
                 `${t(PROVIDER_META[source.provider].labelKey)} · ${source.buckets.join(", ") || t("noBuckets")}`),
         );
         const actions = el("div", "s3u__source-actions");
-        const edit = button("b3-button b3-button--outline b3-button--small", t("sourceEdit"));
+        const edit = iconButton("iconEdit", t("sourceEdit"), "b3-button b3-button--outline b3-button--icon");
         edit.addEventListener("click", () => onEdit(source));
-        const remove = button("b3-button b3-button--cancel b3-button--small", t("sourceDelete"));
+        const remove = iconButton("iconTrashcan", t("sourceDelete"), "b3-button b3-button--remove b3-button--icon");
         remove.addEventListener("click", () => onDelete(source));
         actions.append(edit, remove);
         row.append(info, actions);

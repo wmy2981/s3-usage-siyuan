@@ -87,15 +87,28 @@
     padding: 16px 20px 24px;
 }
 
-.s3u__source-section + .s3u__source-section {
-    margin-top: 22px;
+/*
+ * 桌面端一个数据源就是一列，宽度随窗口伸缩；数据源少时列会铺满整行，
+ * 不再把每个数据源都排成一条竖列、右侧留白。
+ */
+.s3u__content {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+    gap: 20px 16px;
+    align-items: start;
+}
+
+.s3u__source-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
 }
 
 .s3u__section-head {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-bottom: 10px;
 }
 
 .s3u__section-title {
@@ -147,8 +160,10 @@
 
 .s3u__grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+    /* auto-fit：桶少时卡片撑满整列，桶多时自动分列，宽高都跟着内容走 */
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
     gap: 12px;
+    align-items: start;
 }
 
 .s3u__card {
@@ -160,6 +175,8 @@
     border-radius: 10px;
     background: var(--b3-theme-background);
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    /* 卡片宽度可变，指标列数按卡片自身宽度决定，而不是按窗口宽度 */
+    container-type: inline-size;
 }
 
 .s3u__card:hover {
@@ -179,9 +196,7 @@
     min-width: 0;
     font-size: 13px;
     font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
 }
 
 .s3u__card-provider {
@@ -213,6 +228,7 @@
 
 .s3u__metrics {
     display: grid;
+    /* 固定两列：4 项指标总是 2×2，不会因为卡片变宽出现 3+1 的断行 */
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px 14px;
 }
@@ -222,6 +238,13 @@
     flex-direction: column;
     gap: 1px;
     min-width: 0;
+}
+
+/* 卡片够宽时指标排成一行，避免两列在大卡片里被拉得太散 */
+@container (min-width: 380px) {
+    .s3u__metrics {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
 }
 
 .s3u__metric-label {
@@ -238,9 +261,7 @@
 .s3u__metric-value {
     font-size: 13px;
     font-variant-numeric: tabular-nums;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
 }
 
 .s3u__classes {
@@ -547,6 +568,8 @@
     color: var(--b3-theme-on-surface);
     font-size: 11px;
     opacity: 0.75;
+    /* 收尾不留孤字：避免最后一行只剩一个字加标点 */
+    text-wrap: pretty;
 }
 
 @media (max-width: 560px) {
@@ -568,10 +591,6 @@
     .s3u__content,
     .s3u__settings {
         padding: 12px 14px 20px;
-    }
-
-    .s3u__grid {
-        grid-template-columns: 1fr;
     }
 
     .s3u__source-row {

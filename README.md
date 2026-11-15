@@ -37,13 +37,13 @@ View bucket usage of S3-compatible object storage inside SiYuan: storage size, o
 ## Setup
 
 1. Enable the plugin and click the cloud-chart icon in the top bar, or run the command **View S3 bucket usage**.
-2. Open **Data sources → Add data source**.
+2. Click the gear icon in the top right to open **Data sources**, then click **+** to add one.
 3. Choose a provider, fill in the endpoint / region / bucket names, and enter the credentials.
    - Multiple buckets: one per line, or comma-separated.
    - For Tencent COS the bucket name normally ends with `-APPID`; the APPID is parsed automatically, or you can fill in **Account ID**.
    - For Cloudflare R2, **Account ID** is required and the API token goes into **Access Key**; the token needs **Account → Account Analytics → Read**.
 4. Save. The first query starts immediately.
-5. To reuse the S3 configuration already saved in SiYuan, click **Import SiYuan S3 sync configuration** or tick **Use the SiYuan S3 sync configuration** in the editor.
+5. To reuse the S3 configuration already saved in SiYuan, click the download icon (**Import SiYuan S3 sync configuration**) or tick **Use the SiYuan S3 sync configuration** in the editor.
 
 ### Credential encryption
 

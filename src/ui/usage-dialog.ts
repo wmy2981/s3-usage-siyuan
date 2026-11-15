@@ -18,7 +18,7 @@ import type {T} from "../i18n";
 import type {BucketUsage} from "../providers/types";
 import {PROVIDER_META} from "../providers/meta";
 import {queryBucket, QueryError} from "../query";
-import {button, clear, el} from "./dom";
+import {clear, el, iconButton, labeledIconButton} from "./dom";
 import {renderSourceList, SourceForm} from "./source-form";
 
 const DIALOG_CLASS = "s3u-dialog";
@@ -65,7 +65,7 @@ export class UsageDialog {
         }
         this.dialog = new Dialog({
             title: this.t("dialogTitle"),
-            width: "920px",
+            width: "min(1040px, 92vw)",
             content: '<div class="b3-dialog__content"><div class="s3u"></div></div>',
             containerClassName: DIALOG_CLASS,
             destroyCallback: () => {
@@ -136,10 +136,10 @@ export class UsageDialog {
         const title = el("div", "s3u__toolbar-title");
         title.append(el("div", "s3u__subtitle", this.t("settingsNote")));
         const actions = el("div", "s3u__toolbar-actions");
-        const refresh = button("b3-button b3-button--outline", this.t("refreshAll"));
+        const refresh = labeledIconButton("b3-button b3-button--outline", "iconRefresh", this.t("refreshAll"));
         refresh.disabled = this.querying || this.settings.sources.length === 0;
         refresh.addEventListener("click", () => void this.refreshAll());
-        const manage = button("b3-button b3-button--text", this.t("settings"));
+        const manage = iconButton("iconSettings", this.t("settings"));
         manage.addEventListener("click", () => {
             this.view = "sources";
             this.editing = undefined;
@@ -169,7 +169,7 @@ export class UsageDialog {
             el("div", "s3u__empty-desc", this.t("emptyDescription")),
         );
         const actions = el("div", "s3u__empty-actions");
-        const add = button("b3-button b3-button--text", this.t("addSource"));
+        const add = labeledIconButton("b3-button b3-button--text", "iconAdd", this.t("addSource"));
         add.addEventListener("click", () => {
             this.view = "sources";
             this.adding = true;
@@ -178,7 +178,7 @@ export class UsageDialog {
         });
         actions.append(add);
         if (readSyncS3Config()) {
-            const importButton = button("b3-button b3-button--outline", this.t("importSync"));
+            const importButton = labeledIconButton("b3-button b3-button--outline", "iconDownload", this.t("importSync"));
             importButton.addEventListener("click", () => void this.importSyncSource());
             actions.append(importButton);
         }
@@ -266,7 +266,7 @@ export class UsageDialog {
         const message = this.errorMessage(source, result.error);
         box.append(el("div", "s3u__error-title", this.t("queryFailed")));
         box.append(el("div", "s3u__error-text", message));
-        const retry = button("b3-button b3-button--outline b3-button--small", this.t("retry"));
+        const retry = iconButton("iconRefresh", this.t("retry"));
         retry.addEventListener("click", () => void this.queryOne(source, bucket));
         box.append(retry);
         return box;
@@ -383,7 +383,7 @@ export class UsageDialog {
         const title = el("div", "s3u__toolbar-title");
         title.append(el("div", "s3u__subtitle", this.t("settingsNote")));
         const actions = el("div", "s3u__toolbar-actions");
-        const back = button("b3-button b3-button--text", this.t("back"));
+        const back = iconButton("iconBack", this.t("back"));
         back.addEventListener("click", () => {
             this.editing = undefined;
             this.adding = false;
@@ -402,11 +402,15 @@ export class UsageDialog {
         listHead.append(el("div", "s3u__settings-title", this.t("sourceTitle")));
         const listActions = el("div", "s3u__toolbar-actions");
         if (readSyncS3Config()) {
-            const importButton = button("b3-button b3-button--outline", this.t("importSync"));
+            const importButton = iconButton(
+                "iconDownload",
+                this.t("importSync"),
+                "b3-button b3-button--outline b3-button--icon",
+            );
             importButton.addEventListener("click", () => void this.importSyncSource());
             listActions.append(importButton);
         }
-        const add = button("b3-button b3-button--text", this.t("addSource"));
+        const add = iconButton("iconAdd", this.t("addSource"), "b3-button b3-button--text b3-button--icon");
         add.addEventListener("click", () => {
             this.adding = true;
             this.editing = undefined;

@@ -4,14 +4,17 @@
 <meta charset="utf-8">
 <title>S3 桶用量 · 预览</title>
 <style>
+    /* 这张图是集市预览图，按 1024x768 固定尺寸绘制，内容与插件的用量视图一一对应。 */
     :root {
-        --bg: #f4f5f7;
-        --surface: #ffffff;
-        --text: #1f2329;
-        --muted: #6b7280;
-        --border: #e3e5e8;
-        --primary: #3573f0;
-        --shadow: 0 18px 50px rgba(15, 23, 42, 0.12);
+        --b3-theme-primary: #3575f0;
+        --b3-theme-primary-lightest: rgba(53, 117, 240, .12);
+        --b3-theme-background: #fff;
+        --b3-theme-surface: #f6f6f6;
+        --b3-theme-on-background: #222;
+        --b3-theme-on-surface: #5f6368;
+        --b3-border-color: #e3e5e8;
+        --b3-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        --b3-font-family-code: ui-monospace, SFMono-Regular, Consolas, monospace;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; }
@@ -19,9 +22,9 @@
         width: 1024px;
         height: 768px;
         overflow: hidden;
-        background: var(--bg);
-        color: var(--text);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: #f4f5f7;
+        color: var(--b3-theme-on-background);
+        font-family: var(--b3-font-family);
         font-size: 14px;
     }
     .canvas {
@@ -32,14 +35,14 @@
         background:
             radial-gradient(circle at 88% 12%, rgba(53, 115, 240, 0.12), transparent 36%),
             radial-gradient(circle at 8% 88%, rgba(94, 225, 255, 0.10), transparent 40%),
-            var(--bg);
+            #f4f5f7;
     }
     .window {
         height: 100%;
         border: 1px solid rgba(227, 229, 232, 0.9);
         border-radius: 14px;
-        background: var(--surface);
-        box-shadow: var(--shadow);
+        background: var(--b3-theme-background);
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.12);
         overflow: hidden;
         display: flex;
         flex-direction: column;
@@ -50,189 +53,242 @@
         gap: 8px;
         height: 42px;
         padding: 0 16px;
-        border-bottom: 1px solid var(--border);
+        border-bottom: 1px solid var(--b3-border-color);
         background: #fafbfc;
+        flex: 0 0 auto;
     }
     .dot { width: 10px; height: 10px; border-radius: 50%; background: #d7dbe0; }
     .dot:nth-child(2) { background: #c7ccd3; }
     .dot:nth-child(3) { background: #b8bec7; }
-    .window-title { margin-left: 10px; color: var(--muted); font-size: 12px; }
-    .toolbar {
+    .window-title { margin-left: 10px; color: var(--b3-theme-on-surface); font-size: 12px; }
+
+    /* ---------- 与插件一致的内容区 ---------- */
+    .s3u {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        line-height: 1.5;
+    }
+    .s3u__toolbar {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
-        gap: 18px;
-        padding: 14px 20px 10px;
-        border-bottom: 1px solid var(--border);
+        gap: 16px;
+        padding: 14px 20px 12px;
+        border-bottom: 1px solid var(--b3-border-color);
+        background: var(--b3-theme-surface);
     }
-    .title { font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
-    .subtitle { margin-top: 3px; color: var(--muted); font-size: 12px; }
-    .toolbar-actions { display: flex; gap: 8px; }
+    .s3u__title { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+    .s3u__subtitle { margin-top: 2px; color: var(--b3-theme-on-surface); font-size: 12px; opacity: .8; }
+    .s3u__toolbar-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+
     .btn {
         display: inline-flex;
         align-items: center;
-        height: 30px;
-        padding: 0 12px;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        background: #fff;
-        color: var(--text);
-        font-size: 12px;
+        justify-content: center;
+        height: 28px;
+        padding: 4px 8px;
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        color: var(--b3-theme-primary);
+        font-family: inherit;
+        font-size: 14px;
+        line-height: 20px;
         white-space: nowrap;
+        box-shadow: inset 0 0 0 .6px var(--b3-theme-primary);
     }
-    .btn.primary { border-color: transparent; background: var(--primary); color: #fff; }
-    .content { flex: 1; padding: 12px 20px 16px; overflow: hidden; }
-    .section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-    .provider {
+    .btn svg { width: 16px; height: 16px; margin-right: 4px; flex-shrink: 0; }
+    .icon-btn {
+        display: flex;
+        align-items: center;
+        padding: 4px;
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        color: var(--b3-theme-on-surface);
+        line-height: 16px;
+    }
+    .icon-btn svg { width: 16px; height: 16px; }
+
+    .s3u__content {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+        gap: 20px 16px;
+        align-items: start;
+        padding: 16px 20px 24px;
+    }
+    .s3u__source-section { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    .s3u__section-head { display: flex; align-items: center; gap: 10px; }
+    .s3u__section-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .s3u__section-name { font-size: 14px; font-weight: 600; }
+    .s3u__provider {
+        flex: 0 0 auto;
         padding: 2px 8px;
         border-radius: 999px;
         font-size: 11px;
-        font-weight: 650;
+        font-weight: 600;
     }
-    .aliyun { color: #ff6a00; background: rgba(255, 106, 0, 0.12); }
-    .tencent { color: #0052d9; background: rgba(0, 82, 217, 0.12); }
-    .minio { color: #c72e49; background: rgba(199, 46, 73, 0.12); }
-    .section-name { font-size: 14px; font-weight: 650; }
-    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
-    .card {
-        padding: 12px;
-        border: 1px solid var(--border);
+    .s3u__provider--aliyunOss { color: #ff6a00; background: rgba(255, 106, 0, .12); }
+    .s3u__provider--tencentCos { color: #0052d9; background: rgba(0, 82, 217, .12); }
+
+    .s3u__grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+        gap: 12px;
+        align-items: start;
+    }
+    .s3u__card {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        padding: 14px;
+        border: 1px solid var(--b3-border-color);
         border-radius: 10px;
-        background: #fff;
+        background: var(--b3-theme-background);
     }
-    .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-    .bucket { font-size: 13px; font-weight: 650; }
-    .card-provider { color: var(--muted); font-size: 11px; }
-    .storage { font-size: 24px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15; }
-    .storage-label { margin-top: 2px; color: var(--muted); font-size: 12px; }
-    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin-top: 8px; }
-    .metric-label { color: var(--muted); font-size: 11px; }
-    .metric-value { font-size: 13px; font-variant-numeric: tabular-nums; }
-    .divider { height: 1px; background: var(--border); margin: 8px 0; }
-    .class-row { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; padding: 1px 0; }
-    .class-row b { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
-    .note { margin-top: 6px; color: var(--muted); font-size: 10.5px; }
-    .badge { display: inline-block; padding: 1px 7px; border-radius: 999px; background: rgba(34, 197, 94, 0.12); color: #15803d; font-size: 10.5px; }
+    .s3u__card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .s3u__bucket { min-width: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+    .s3u__card-provider { flex: 0 0 auto; color: var(--b3-theme-on-surface); font-size: 11px; opacity: .7; }
+    .s3u__card-body { display: flex; flex-direction: column; gap: 10px; }
+    .s3u__storage-value { font-size: 28px; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; }
+    .s3u__storage-label { margin-top: 2px; color: var(--b3-theme-on-surface); font-size: 12px; opacity: .75; }
+    .s3u__metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 14px; }
+    .s3u__metric { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+    .s3u__metric-label { color: var(--b3-theme-on-surface); font-size: 11px; opacity: .75; }
+    .s3u__metric-value { font-size: 13px; font-variant-numeric: tabular-nums; }
+    .s3u__classes { border-top: 1px dashed var(--b3-border-color); padding-top: 8px; }
+    .s3u__classes summary { color: var(--b3-theme-on-surface); font-size: 12px; }
+    .s3u__table { width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 12px; }
+    .s3u__table th, .s3u__table td { padding: 4px 6px; border-bottom: 1px solid var(--b3-border-color); text-align: left; white-space: nowrap; }
+    .s3u__table th:not(:first-child), .s3u__table td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+    .s3u__table th { color: var(--b3-theme-on-surface); font-weight: 500; opacity: .75; }
+    .s3u__meta { color: var(--b3-theme-on-surface); font-size: 11px; opacity: .75; }
+    .s3u__notes { color: var(--b3-theme-on-surface); font-size: 11px; opacity: .75; }
+    .s3u__note::before { content: "· "; }
 </style>
 </head>
 <body>
+<svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true"><defs>
+<symbol id="iconRefresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+<symbol id="iconSettings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></symbol>
+</defs></svg>
 <div class="canvas">
     <div class="window">
         <div class="window-bar">
             <span class="dot"></span><span class="dot"></span><span class="dot"></span>
             <span class="window-title">思源笔记</span>
         </div>
-        <div class="toolbar">
-            <div>
-                <div class="title">S3 桶用量</div>
-                <div class="subtitle">只查询用量数据，不接账单接口；服务商数据可能有延迟。</div>
-            </div>
-            <div class="toolbar-actions">
-                <span class="btn">刷新全部</span>
-                <span class="btn">数据源</span>
-            </div>
-        </div>
-        <div class="content">
-            <div class="section-head">
-                <span class="provider aliyun">阿里云 OSS</span>
-                <span class="section-name">主账号 · 杭州</span>
-                <span class="badge">已更新</span>
-            </div>
-            <div class="grid">
-                <div class="card">
-                    <div class="card-head"><span class="bucket">notes-assets</span><span class="card-provider">阿里云 OSS</span></div>
-                    <div class="storage">1.82 TB</div>
-                    <div class="storage-label">存储量</div>
-                    <div class="metrics">
-                        <div><div class="metric-label">对象数</div><div class="metric-value">128,430</div></div>
-                        <div><div class="metric-label">流入流量</div><div class="metric-value">—</div></div>
-                        <div><div class="metric-label">流出流量</div><div class="metric-value">—</div></div>
-                        <div><div class="metric-label">请求数</div><div class="metric-value">—</div></div>
-                    </div>
-                    <div class="divider"></div>
-                    <div class="class-row"><span>标准存储</span><b>1.61 TB</b></div>
-                    <div class="class-row"><span>低频访问</span><b>214.5 GB</b></div>
-                    <div class="note">OSS 统计非实时，延时可能超过 1 小时。</div>
+        <div class="s3u">
+            <div class="s3u__toolbar">
+                <div>
+                    <div class="s3u__title">S3 桶用量</div>
+                    <div class="s3u__subtitle">只查询用量数据，不接账单接口；服务商数据可能有延迟。</div>
                 </div>
-                <div class="card">
-                    <div class="card-head"><span class="bucket">backup-1250000000</span><span class="card-provider">腾讯云 COS</span></div>
-                    <div class="storage">486.3 GB</div>
-                    <div class="storage-label">存储量</div>
-                    <div class="metrics">
-                        <div><div class="metric-label">对象数</div><div class="metric-value">9,812</div></div>
-                        <div><div class="metric-label">流入流量</div><div class="metric-value">12.4 GB</div></div>
-                        <div><div class="metric-label">流出流量</div><div class="metric-value">38.9 GB</div></div>
-                        <div><div class="metric-label">请求数</div><div class="metric-value">184,203</div></div>
-                    </div>
-                    <div class="divider"></div>
-                    <div class="class-row"><span>标准存储</span><b>486.3 GB</b></div>
-                    <div class="note">COS 监控数据约延迟 2 小时。</div>
-                </div>
-                <div class="card">
-                    <div class="card-head"><span class="bucket">media</span><span class="card-provider">MinIO</span></div>
-                    <div class="storage">72.9 GB</div>
-                    <div class="storage-label">存储量</div>
-                    <div class="metrics">
-                        <div><div class="metric-label">对象数</div><div class="metric-value">3,204</div></div>
-                        <div><div class="metric-label">流入流量</div><div class="metric-value">—</div></div>
-                        <div><div class="metric-label">流出流量</div><div class="metric-value">—</div></div>
-                        <div><div class="metric-label">请求数</div><div class="metric-value">—</div></div>
-                    </div>
-                    <div class="divider"></div>
-                    <div class="class-row"><span>标准存储</span><b>72.9 GB</b></div>
-                    <div class="note">返回最近一次扫描完成的用量快照。</div>
+                <div class="s3u__toolbar-actions">
+                    <span class="btn"><svg><use href="#iconRefresh" xlink:href="#iconRefresh"></use></svg>刷新全部</span>
+                    <span class="icon-btn"><svg><use href="#iconSettings" xlink:href="#iconSettings"></use></svg></span>
                 </div>
             </div>
-
-            <div class="section-head">
-                <span class="provider tencent">七牛云 Kodo</span>
-                <span class="section-name">图片空间</span>
-            </div>
-            <div class="grid">
-                <div class="card">
-                    <div class="card-head"><span class="bucket">img-cdn</span><span class="card-provider">七牛云 Kodo</span></div>
-                    <div class="storage">36.1 GB</div>
-                    <div class="storage-label">存储量</div>
-                    <div class="metrics">
-                        <div><div class="metric-label">对象数</div><div class="metric-value">18,903</div></div>
-                        <div><div class="metric-label">流入流量</div><div class="metric-value">—</div></div>
-                        <div><div class="metric-label">流出流量</div><div class="metric-value">—</div></div>
-                        <div><div class="metric-label">请求数</div><div class="metric-value">—</div></div>
+            <div class="s3u__content">
+                <section class="s3u__source-section">
+                    <div class="s3u__section-head">
+                        <div class="s3u__section-title">
+                            <span class="s3u__provider s3u__provider--aliyunOss">阿里云 OSS</span>
+                            <span class="s3u__section-name">SiYuan S3 · wmy-siyuan</span>
+                        </div>
                     </div>
-                    <div class="divider"></div>
-                    <div class="class-row"><span>标准存储</span><b>30.2 GB</b></div>
-                    <div class="class-row"><span>低频存储</span><b>5.9 GB</b></div>
-                    <div class="note">七牛统计约延迟 5 分钟。</div>
-                </div>
-                <div class="card">
-                    <div class="card-head"><span class="bucket">archive</span><span class="card-provider">AWS S3</span></div>
-                    <div class="storage">2.43 TB</div>
-                    <div class="storage-label">存储量</div>
-                    <div class="metrics">
-                        <div><div class="metric-label">对象数</div><div class="metric-value">74,112</div></div>
-                        <div><div class="metric-label">流入流量</div><div class="metric-value">—</div></div>
-                        <div><div class="metric-label">流出流量</div><div class="metric-value">—</div></div>
-                        <div><div class="metric-label">请求数</div><div class="metric-value">—</div></div>
+                    <div class="s3u__grid">
+                        <article class="s3u__card">
+                            <div class="s3u__card-head"><span class="s3u__bucket">wmy-siyuan</span><span class="s3u__card-provider">阿里云 OSS</span></div>
+                            <div class="s3u__card-body">
+                                <div class="s3u__storage">
+                                    <div class="s3u__storage-value">677.44 MB</div>
+                                    <div class="s3u__storage-label">存储量</div>
+                                </div>
+                                <div class="s3u__metrics">
+                                    <div class="s3u__metric"><span class="s3u__metric-label">对象数</span><span class="s3u__metric-value">44,276</span></div>
+                                    <div class="s3u__metric"><span class="s3u__metric-label">流入流量</span><span class="s3u__metric-value">—</span></div>
+                                    <div class="s3u__metric"><span class="s3u__metric-label">流出流量</span><span class="s3u__metric-value">—</span></div>
+                                    <div class="s3u__metric"><span class="s3u__metric-label">请求数</span><span class="s3u__metric-value">—</span></div>
+                                </div>
+                                <details class="s3u__classes" open>
+                                    <summary>存储类型明细</summary>
+                                    <table class="s3u__table">
+                                        <thead><tr><th>存储类型</th><th>存储量</th><th>对象数</th></tr></thead>
+                                        <tbody>
+                                            <tr><td>标准存储</td><td>664.9 MB</td><td>44,101</td></tr>
+                                            <tr><td>低频访问</td><td>12.5 MB</td><td>175</td></tr>
+                                        </tbody>
+                                    </table>
+                                </details>
+                                <div class="s3u__meta">数据统计时间：2026/11/15 16:40:00</div>
+                                <div class="s3u__notes"><div class="s3u__note">OSS 统计非实时，延时可能超过 1 小时。</div></div>
+                            </div>
+                        </article>
+                        <article class="s3u__card">
+                            <div class="s3u__card-head"><span class="s3u__bucket">notes-assets</span><span class="s3u__card-provider">阿里云 OSS</span></div>
+                            <div class="s3u__card-body">
+                                <div class="s3u__storage">
+                                    <div class="s3u__storage-value">1.82 TB</div>
+                                    <div class="s3u__storage-label">存储量</div>
+                                </div>
+                                <div class="s3u__metrics">
+                                    <div class="s3u__metric"><span class="s3u__metric-label">对象数</span><span class="s3u__metric-value">128,430</span></div>
+                                    <div class="s3u__metric"><span class="s3u__metric-label">流入流量</span><span class="s3u__metric-value">—</span></div>
+                                    <div class="s3u__metric"><span class="s3u__metric-label">流出流量</span><span class="s3u__metric-value">—</span></div>
+                                    <div class="s3u__metric"><span class="s3u__metric-label">请求数</span><span class="s3u__metric-value">—</span></div>
+                                </div>
+                                <div class="s3u__meta">数据统计时间：2026/11/15 16:40:00</div>
+                                <div class="s3u__notes"><div class="s3u__note">OSS 统计非实时，延时可能超过 1 小时。</div></div>
+                            </div>
+                        </article>
                     </div>
-                    <div class="divider"></div>
-                    <div class="class-row"><span>标准存储</span><b>1.02 TB</b></div>
-                    <div class="class-row"><span>Glacier</span><b>1.41 TB</b></div>
-                    <div class="note">CloudWatch 每天发布一次桶大小。</div>
-                </div>
-                <div class="card">
-                    <div class="card-head"><span class="bucket">r2-public</span><span class="card-provider">Cloudflare R2</span></div>
-                    <div class="storage">128.7 GB</div>
-                    <div class="storage-label">存储量</div>
-                    <div class="metrics">
-                        <div><div class="metric-label">对象数</div><div class="metric-value">6,751</div></div>
-                        <div><div class="metric-label">流入流量</div><div class="metric-value">2.1 GB</div></div>
-                        <div><div class="metric-label">流出流量</div><div class="metric-value">19.8 GB</div></div>
-                        <div><div class="metric-label">请求数</div><div class="metric-value">92,114</div></div>
+                </section>
+                <section class="s3u__source-section">
+                    <div class="s3u__section-head">
+                        <div class="s3u__section-title">
+                            <span class="s3u__provider s3u__provider--tencentCos">腾讯云 COS</span>
+                            <span class="s3u__section-name">备份账号</span>
+                        </div>
                     </div>
-                    <div class="divider"></div>
-                    <div class="class-row"><span>标准存储</span><b>128.7 GB</b></div>
-                    <div class="note">请求数与流量为最近 24 小时合计。</div>
-                </div>
+                    <div class="s3u__grid">
+                        <article class="s3u__card">
+                            <div class="s3u__card-head"><span class="s3u__bucket">backup-1250000000</span><span class="s3u__card-provider">腾讯云 COS</span></div>
+                            <div class="s3u__card-body">
+                                <div class="s3u__storage">
+                                    <div class="s3u__storage-value">486.3 GB</div>
+                                    <div class="s3u__storage-label">存储量</div>
+                                </div>
+                                <div class="s3u__metrics">
+                                    <div class="s3u__metric"><span class="s3u__metric-label">对象数</span><span class="s3u__metric-value">9,812</span></div>
+                                    <div class="s3u__metric"><span class="s3u__metric-label">流入流量</span><span class="s3u__metric-value">12.4 GB</span></div>
+                                    <div class="s3u__metric"><span class="s3u__metric-label">流出流量</span><span class="s3u__metric-value">38.9 GB</span></div>
+                                    <div class="s3u__metric"><span class="s3u__metric-label">请求数</span><span class="s3u__metric-value">184,203</span></div>
+                                </div>
+                                <div class="s3u__meta">数据统计时间：2026/11/15 16:00:00</div>
+                                <div class="s3u__notes"><div class="s3u__note">COS 监控数据约延迟 2 小时。</div></div>
+                            </div>
+                        </article>
+                        <article class="s3u__card">
+                            <div class="s3u__card-head"><span class="s3u__bucket">img-cdn</span><span class="s3u__card-provider">腾讯云 COS</span></div>
+                            <div class="s3u__card-body">
+                                <div class="s3u__storage">
+                                    <div class="s3u__storage-value">36.1 GB</div>
+                                    <div class="s3u__storage-label">存储量</div>
+                                </div>
+                                <div class="s3u__metrics">
+                                    <div class="s3u__metric"><span class="s3u__metric-label">对象数</span><span class="s3u__metric-value">18,903</span></div>
+                                    <div class="s3u__metric"><span class="s3u__metric-label">流入流量</span><span class="s3u__metric-value">2.1 GB</span></div>
+                                    <div class="s3u__metric"><span class="s3u__metric-label">流出流量</span><span class="s3u__metric-value">19.8 GB</span></div>
+                                    <div class="s3u__metric"><span class="s3u__metric-label">请求数</span><span class="s3u__metric-value">92,114</span></div>
+                                </div>
+                                <div class="s3u__meta">数据统计时间：2026/11/15 16:00:00</div>
+                                <div class="s3u__notes"><div class="s3u__note">COS 监控数据约延迟 2 小时。</div></div>
+                            </div>
+                        </article>
+                    </div>
+                </section>
             </div>
         </div>
     </div>
