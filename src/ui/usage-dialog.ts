@@ -548,6 +548,7 @@ export class UsageDialog {
                     this.render();
                 },
                 onTest: (source) => this.testSource(source),
+                onClearCredentials: (source) => this.clearCredentials(source),
             });
             content.append(form.element);
         }
@@ -648,6 +649,38 @@ export class UsageDialog {
         showMessage(this.t("sourceSaved"), 2500, "info", "s3u-saved");
         this.render();
         void this.refreshAll();
+    }
+
+    /** 清掉已持久化的凭据，但保留数据源本身；用户需要重新填写才能继续查询。 */
+    private clearCredentials(source: DataSource): void {
+        const stored = this.settings.sources.find((item) => item.id === source.id);
+        if (!stored) {
+            return;
+        }
+        confirm(this.t("clearCredentials"), this.t("clearCredentialsConfirm", {name: stored.name}), () => {
+            void (async () => {
+                try {
+                    const sources = this.settings.sources.map((item) => item.id === stored.id
+                        ? {
+                            ...item,
+                            accessKey: "",
+                            secretKey: "",
+                            credentials: undefined,
+                            credentialsError: false,
+                            credentialsErrorReason: "" as const,
+                        }
+                        : item);
+                    this.settings = await this.onSave({...this.settings, sources});
+                    this.results.clear();
+                    this.adding = false;
+                    this.editing = undefined;
+                    this.render();
+                    showMessage(this.t("credentialsCleared"), 2500, "info");
+                } catch (error) {
+                    showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
+                }
+            })();
+        }, undefined, true);
     }
 
     private confirmDelete(source: DataSource): void {

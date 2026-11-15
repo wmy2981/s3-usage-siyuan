@@ -590,9 +590,15 @@
 
 .s3u__editor-actions {
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: 8px;
     margin-top: 10px;
+}
+
+/* 破坏性操作放在最左，和保存/取消拉开距离 */
+.s3u__clear-credentials {
+    margin-right: auto;
 }
 
 .s3u__settings-note,

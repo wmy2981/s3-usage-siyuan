@@ -23,6 +23,8 @@ export interface SourceFormOptions {
     onSave: (source: DataSource) => Promise<void>;
     onCancel: () => void;
     onTest: (source: DataSource) => Promise<string>;
+    /** 删除已保存的凭据；由外层确认、保存并重画，表单本身不负责落盘。 */
+    onClearCredentials: (source: DataSource) => void;
 }
 
 function emptySource(): DataSource {
@@ -207,6 +209,12 @@ export class SourceForm {
         root.append(this.status);
 
         const actions = el("div", "s3u__editor-actions");
+        const existing = this.options.source;
+        if (existing?.credentials) {
+            const clear = button("b3-button b3-button--remove s3u__clear-credentials", this.t("clearCredentials"));
+            clear.addEventListener("click", () => this.options.onClearCredentials(existing));
+            actions.append(clear);
+        }
         const cancel = button("b3-button b3-button--cancel", this.t("sourceCancel"));
         cancel.addEventListener("click", () => this.options.onCancel());
         this.testButton = button("b3-button b3-button--outline", "");
