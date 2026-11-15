@@ -55,6 +55,7 @@ export class UsageDialog {
     private readonly onReload: () => Promise<PluginSettings>;
     private dialog?: Dialog;
     private root?: HTMLElement;
+    private live?: HTMLElement;
     private view: "usage" | "sources" = "usage";
     private renderedView?: "usage" | "sources";
     private timer?: number;
@@ -95,15 +96,17 @@ export class UsageDialog {
         this.dialog = new Dialog({
             title: this.t("dialogTitle"),
             width: "min(1040px, 92vw)",
-            content: '<div class="b3-dialog__content"><div class="s3u"></div></div>',
+            content: '<div class="b3-dialog__content"><div class="s3u"></div><div class="s3u__live" role="status" aria-live="polite" aria-atomic="true"></div></div>',
             containerClassName: DIALOG_CLASS,
             destroyCallback: () => {
                 this.stopTimer();
                 this.dialog = undefined;
                 this.root = undefined;
+                this.live = undefined;
             },
         });
         this.root = this.dialog.element.querySelector<HTMLElement>(".s3u") ?? undefined;
+        this.live = this.dialog.element.querySelector<HTMLElement>(".s3u__live") ?? undefined;
         if (!this.root) {
             return;
         }
@@ -131,6 +134,20 @@ export class UsageDialog {
         this.dialog?.destroy();
         this.dialog = undefined;
         this.root = undefined;
+        this.live = undefined;
+    }
+
+    /** 读屏播报：先清空再写入，确保连续两次相同的结果也能被念出来。 */
+    private announce(message: string): void {
+        if (!this.live) {
+            return;
+        }
+        this.live.textContent = "";
+        window.setTimeout(() => {
+            if (this.live) {
+                this.live.textContent = message;
+            }
+        }, 30);
     }
 
     /** 同步配置被其他窗口改写后重新载入，不重建对话框。 */
@@ -336,7 +353,8 @@ export class UsageDialog {
 
         const result = this.results.get(this.cardKey(source, bucket));
         if (!result || result.state === "loading") {
-            body.append(this.skeleton());
+            card.setAttribute("aria-busy", "true");
+            body.append(el("span", "s3u__sr-only", this.t("loading")), this.skeleton());
             return card;
         }
         if (result.state === "error") {
@@ -362,6 +380,8 @@ export class UsageDialog {
 
     private skeleton(): HTMLElement {
         const box = el("div", "s3u__skeleton");
+        // 骨架只是视觉占位，读屏只读上面那句「正在查询…」
+        box.setAttribute("aria-hidden", "true");
         box.append(
             el("div", "s3u__skeleton-line s3u__skeleton-line--big"),
             el("div", "s3u__skeleton-line"),
@@ -825,6 +845,11 @@ export class UsageDialog {
         };
         await Promise.all([worker(), worker()]);
         this.querying = false;
+        const failed = tasks.filter((task) =>
+            this.results.get(this.cardKey(task.source, task.bucket))?.state === "error").length;
+        this.announce(failed === 0
+            ? this.t("querySummaryOk", {count: tasks.length})
+            : this.t("querySummaryFailed", {ok: tasks.length - failed, failed}));
         const refresh = this.root?.querySelector<HTMLButtonElement>(".s3u__toolbar-actions .b3-button");
         if (refresh) {
             refresh.disabled = this.settings.sources.length === 0;

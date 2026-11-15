@@ -31,6 +31,28 @@
     display: none !important;
 }
 
+/* 读屏专用：视觉上隐藏，但仍参与无障碍树 */
+.s3u__live,
+.s3u__sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.s3u a:focus-visible,
+.s3u button:focus-visible,
+.s3u summary:focus-visible {
+    outline: 2px solid var(--b3-theme-primary);
+    outline-offset: 2px;
+}
+
 .s3u a {
     color: var(--b3-theme-primary);
     text-decoration: none;

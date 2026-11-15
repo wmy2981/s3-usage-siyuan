@@ -142,5 +142,7 @@
   "autoRefreshHint": "Only while this dialog is open; data older than the interval is dimmed.",
   "clearCredentials": "Clear saved credentials",
   "clearCredentialsConfirm": "Clear the saved Access Key / Secret Key for “{name}”? You must enter them again before querying, and unsaved edits in this form will be lost.",
-  "credentialsCleared": "Saved credentials cleared"
+  "credentialsCleared": "Saved credentials cleared",
+  "querySummaryOk": "Query finished: {count} buckets",
+  "querySummaryFailed": "Query finished: {ok} succeeded, {failed} failed"
 }

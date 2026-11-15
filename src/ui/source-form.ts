@@ -206,6 +206,9 @@ export class SourceForm {
         root.append(this.accessRow, this.secretRow);
 
         this.status = el("div", "s3u__status");
+        this.status.setAttribute("role", "status");
+        this.status.setAttribute("aria-live", "polite");
+        this.status.setAttribute("aria-atomic", "true");
         root.append(this.status);
 
         const actions = el("div", "s3u__editor-actions");

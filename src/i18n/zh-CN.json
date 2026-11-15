@@ -142,5 +142,7 @@
   "autoRefreshHint": "只在对话框打开时生效；超过刷新间隔的数据会显示为灰色。",
   "clearCredentials": "清除已保存凭据",
   "clearCredentialsConfirm": "确定清除数据源「{name}」保存的 Access Key / Secret Key？清除后需要重新填写才能查询，当前未保存的修改也会丢失。",
-  "credentialsCleared": "已清除保存的凭据"
+  "credentialsCleared": "已清除保存的凭据",
+  "querySummaryOk": "查询完成：{count} 个桶",
+  "querySummaryFailed": "查询完成：{ok} 个成功，{failed} 个失败"
 }
