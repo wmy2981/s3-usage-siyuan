@@ -1,13 +1,28 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160" role="img" aria-label="S3 bucket usage">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#16233f"/>
-      <stop offset="1" stop-color="#2457d6"/>
+    <linearGradient id="bucket" x1="80" y1="35" x2="80" y2="128" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5275DF"/>
+      <stop offset="1" stop-color="#2449B7"/>
     </linearGradient>
+    <linearGradient id="usage" x1="56" y1="65" x2="106" y2="106" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#65E6C4"/>
+      <stop offset="1" stop-color="#4DD8FF"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+    </filter>
   </defs>
-  <rect width="160" height="160" rx="36" fill="url(#bg)"/>
-  <path d="M46 104h68a24 24 0 0 0 3.8-47.7A34 34 0 0 0 52 46.5 27 27 0 0 0 46 104Z"
-        fill="none" stroke="#ffffff" stroke-width="8" stroke-linejoin="round"/>
-  <path d="M62 116v16M80 108v24M98 118v14"
-        fill="none" stroke="#5ee1ff" stroke-width="8" stroke-linecap="round"/>
+  <rect width="160" height="160" fill="#FFFFFF"/>
+  <path d="M42 46C42 39.9 59 35 80 35C101 35 118 39.9 118 46V114C118 121.1 101 125 80 125C59 125 42 121.1 42 114V46Z" fill="#5275DF" opacity="0.28" filter="url(#glow)"/>
+  <path d="M42 46C42 39.9 59 35 80 35C101 35 118 39.9 118 46V114C118 121.1 101 125 80 125C59 125 42 121.1 42 114V46Z" fill="url(#bucket)"/>
+  <ellipse cx="80" cy="46" rx="38" ry="11" fill="#83A3F2"/>
+  <path d="M42 70C42 76.1 59 81 80 81C101 81 118 76.1 118 70" fill="none" stroke="#183F9E" stroke-width="3"/>
+  <rect x="57" y="94" width="10" height="13" rx="5" fill="url(#usage)"/>
+  <rect x="75" y="80" width="10" height="27" rx="5" fill="url(#usage)"/>
+  <rect x="93" y="64" width="10" height="43" rx="5" fill="url(#usage)"/>
+  <rect width="160" height="160" filter="url(#grain)" opacity="0.025"/>
 </svg>
