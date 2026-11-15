@@ -129,5 +129,9 @@
   "noteQiniuRequests": "Requests are the sum of GET and PUT counts.",
   "noteVolcDerived": "Traffic and requests are integrated from average bandwidth/QPS and may differ from the console.",
   "noteMinioCumulative": "MinIO metrics are cumulative since the server started, not a 24-hour window.",
-  "noteAwsRequestMetrics": "Enable CloudWatch request metrics on the bucket to see traffic and requests."
+  "noteAwsRequestMetrics": "Enable CloudWatch request metrics on the bucket to see traffic and requests.",
+  "querySettings": "Query settings",
+  "queryTimeout": "Query timeout (seconds)",
+  "queryTimeoutHint": "5–300 seconds; increase it for slow provider monitoring APIs.",
+  "settingsSaved": "Settings saved"
 }

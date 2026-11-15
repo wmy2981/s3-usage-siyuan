@@ -428,6 +428,20 @@
     font-weight: 600;
 }
 
+.s3u__query-settings {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--b3-border-color);
+}
+
+.s3u__query-settings .s3u__settings-title {
+    margin-bottom: 4px;
+}
+
+.s3u__number {
+    width: 96px;
+}
+
 .s3u__source-list {
     display: flex;
     flex-direction: column;

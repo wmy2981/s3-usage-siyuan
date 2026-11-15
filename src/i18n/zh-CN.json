@@ -129,5 +129,9 @@
   "noteQiniuRequests": "请求数为 GET 与 PUT 次数之和。",
   "noteVolcDerived": "流量与请求数由带宽/QPS 平均值按周期积分得到，可能与控制台有差异。",
   "noteMinioCumulative": "MinIO 指标为自服务启动以来的累计值，不是 24 小时窗口。",
-  "noteAwsRequestMetrics": "需要在桶上启用 CloudWatch 请求指标后才有流量与请求数。"
+  "noteAwsRequestMetrics": "需要在桶上启用 CloudWatch 请求指标后才有流量与请求数。",
+  "querySettings": "查询设置",
+  "queryTimeout": "单次查询超时（秒）",
+  "queryTimeoutHint": "5–300 秒；服务商监控接口较慢时可调大。",
+  "settingsSaved": "设置已保存"
 }

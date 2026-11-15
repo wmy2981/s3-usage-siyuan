@@ -6,7 +6,14 @@
  */
 import {confirm, Dialog, showMessage} from "siyuan";
 import type {DataSource, PluginSettings} from "../config";
-import {newSourceId, readSyncS3Config, detectProvider} from "../config";
+import {
+    DEFAULT_TIMEOUT_SECONDS,
+    MAX_TIMEOUT_SECONDS,
+    MIN_TIMEOUT_SECONDS,
+    newSourceId,
+    readSyncS3Config,
+    detectProvider,
+} from "../config";
 import {canEncrypt} from "../secret";
 import {
     errorText,
@@ -18,7 +25,7 @@ import type {T} from "../i18n";
 import type {BucketUsage} from "../providers/types";
 import {PROVIDER_META} from "../providers/meta";
 import {queryBucket, QueryError} from "../query";
-import {clear, el, iconButton, labeledIconButton} from "./dom";
+import {clear, el, fieldRow, iconButton, labeledIconButton} from "./dom";
 import {renderSourceList, SourceForm} from "./source-form";
 
 const DIALOG_CLASS = "s3u-dialog";
@@ -465,8 +472,44 @@ export class UsageDialog {
 
         const encryption = el("div", "s3u__encryption-note",
             this.t(canEncrypt() ? "sourceEncryptionReady" : "sourceEncryptionDisabled"));
-        content.append(encryption);
+        content.append(this.querySettings(), encryption);
         this.root.append(this.entering(content, animate));
+    }
+
+    /** 数据源页底部的查询设置：只改超时，保存后下一次查询生效。 */
+    private querySettings(): HTMLElement {
+        const box = el("div", "s3u__query-settings");
+        box.append(el("div", "s3u__settings-title", this.t("querySettings")));
+        const timeout = el("input", "b3-text-field s3u__number");
+        timeout.type = "number";
+        timeout.min = String(MIN_TIMEOUT_SECONDS);
+        timeout.max = String(MAX_TIMEOUT_SECONDS);
+        timeout.step = "5";
+        timeout.value = String(this.settings.timeoutSeconds);
+        timeout.addEventListener("change", () => {
+            const parsed = Number(timeout.value);
+            const next = Math.min(
+                MAX_TIMEOUT_SECONDS,
+                Math.max(MIN_TIMEOUT_SECONDS, Math.round(Number.isFinite(parsed) ? parsed : DEFAULT_TIMEOUT_SECONDS)),
+            );
+            timeout.value = String(next);
+            void this.saveTimeout(next);
+        });
+        box.append(fieldRow(this.t("queryTimeout"), timeout, this.t("queryTimeoutHint")));
+        return box;
+    }
+
+    private async saveTimeout(timeoutSeconds: number): Promise<void> {
+        if (timeoutSeconds === this.settings.timeoutSeconds) {
+            return;
+        }
+        try {
+            this.settings = await this.onSave({...this.settings, timeoutSeconds});
+            showMessage(this.t("settingsSaved"), 2000, "info");
+        } catch (error) {
+            showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
+            this.render();
+        }
     }
 
     private async persistSource(source: DataSource): Promise<void> {
