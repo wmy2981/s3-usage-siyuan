@@ -402,11 +402,7 @@ export class UsageDialog {
         listHead.append(el("div", "s3u__settings-title", this.t("sourceTitle")));
         const listActions = el("div", "s3u__toolbar-actions");
         if (readSyncS3Config()) {
-            const importButton = iconButton(
-                "iconDownload",
-                this.t("importSync"),
-                "b3-button b3-button--outline b3-button--icon",
-            );
+            const importButton = labeledIconButton("b3-button b3-button--outline", "iconDownload", this.t("importSync"));
             importButton.addEventListener("click", () => void this.importSyncSource());
             listActions.append(importButton);
         }

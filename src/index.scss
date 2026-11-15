@@ -80,6 +80,14 @@
     flex-wrap: wrap;
 }
 
+/* 纯图标按钮必须是正方形：宿主 --icon 的左右内边距会把它撑成 28×24 */
+.s3u .b3-button--icon {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+}
+
 /* ---------- 正文 ---------- */
 
 .s3u__content,
@@ -591,6 +599,15 @@
     .s3u__content,
     .s3u__settings {
         padding: 12px 14px 20px;
+    }
+
+    /* 触屏上纯图标按钮放大到 32×32，24px 太难点中 */
+    .s3u .b3-button--icon,
+    .s3u .block__icon {
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        padding: 0;
     }
 
     .s3u__source-row {
