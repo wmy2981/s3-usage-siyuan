@@ -1,6 +1,6 @@
 # S3 Bucket Usage
 
-[简体中文](README.zh-CN.md) · [MIT License](LICENSE)
+[简体中文](README.zh-CN.md)
 
 View bucket usage of S3-compatible object storage inside SiYuan: storage size, object count, traffic and request counts, with per-storage-class details.
 
@@ -85,14 +85,6 @@ To regenerate images after editing `assets/icon.svg` or `assets/preview.html`:
 npm run render:icon
 npm run render:preview   # needs: npx playwright install chromium
 ```
-
-## Manual verification
-
-1. Install the zip in a test workspace and enable the plugin.
-2. Open the dialog from the top bar; check that the empty state and the data-source editor render.
-3. Add a source; verify the bucket card shows storage/object counts and that unsupported metrics show `—`.
-4. Reopen SiYuan; verify the source persists and the credentials are stored as a `v1:<iv>:<ciphertext>` envelope in the plugin data file.
-5. Use a wrong key once; verify the error is shown instead of a fake zero.
 
 ## License
 

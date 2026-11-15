@@ -1,6 +1,6 @@
 # S3 桶用量
 
-[English](README.md) · [MIT 许可证](LICENSE)
+[English](README.md)
 
 在思源里查看 S3 兼容对象存储的桶用量：存储量、对象数、流量、请求数，以及各存储类型的明细。
 
@@ -85,14 +85,6 @@ npm run verify:package
 npm run render:icon
 npm run render:preview   # 需要先执行 npx playwright install chromium
 ```
-
-## 手动验证
-
-1. 在测试工作空间安装 zip 并启用插件。
-2. 从顶栏打开对话框，确认空状态和数据源编辑器能正常渲染。
-3. 添加一个数据源，确认桶卡片显示存储量/对象数，不支持的指标显示 `—`。
-4. 重启思源，确认数据源还在，插件数据文件里的凭据是 `v1:<iv>:<密文>` 信封。
-5. 故意填错一次密钥，确认界面显示错误而不是假的 0。
 
 ## 许可证
 
