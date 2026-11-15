@@ -1,0 +1,581 @@
+/**
+ * 插件样式。
+ *
+ * 颜色、边框、字体全部取思源的 --b3-* 变量；只有各服务商的强调色是插件自己的品牌色。
+ * 对话框容器与滚动正文常驻 will-change: transform，避免移动端入场时合成层重建闪一帧。
+ */
+
+.b3-dialog__container.s3u-dialog,
+.s3u-dialog .b3-dialog__content {
+    will-change: transform;
+}
+
+.s3u-dialog {
+    max-width: 96vw;
+}
+
+.s3u-dialog .b3-dialog__content {
+    padding: 0;
+    max-height: min(78vh, 820px);
+    overflow: auto;
+}
+
+.s3u {
+    color: var(--b3-theme-on-background);
+    font-family: var(--b3-font-family);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.s3u [hidden] {
+    display: none !important;
+}
+
+.s3u a {
+    color: var(--b3-theme-primary);
+    text-decoration: none;
+}
+
+.s3u a:hover {
+    text-decoration: underline;
+}
+
+/* ---------- 顶栏 ---------- */
+
+.s3u__toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 20px 12px;
+    background: var(--b3-theme-surface);
+    border-bottom: 1px solid var(--b3-border-color);
+}
+
+.s3u__toolbar-title {
+    min-width: 0;
+}
+
+.s3u__title {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.s3u__subtitle {
+    margin-top: 2px;
+    color: var(--b3-theme-on-surface);
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+.s3u__toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+}
+
+/* ---------- 正文 ---------- */
+
+.s3u__content,
+.s3u__settings {
+    padding: 16px 20px 24px;
+}
+
+.s3u__source-section + .s3u__source-section {
+    margin-top: 22px;
+}
+
+.s3u__section-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.s3u__section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.s3u__section-name {
+    font-size: 14px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.s3u__provider {
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--s3u-accent, var(--b3-theme-primary));
+    background: color-mix(in srgb, var(--s3u-accent, var(--b3-theme-primary)) 12%, transparent);
+}
+
+.s3u__provider--aliyunOss { --s3u-accent: #ff6a00; }
+.s3u__provider--tencentCos { --s3u-accent: #0052d9; }
+.s3u__provider--huaweiObs { --s3u-accent: #c7000b; }
+.s3u__provider--volcanoTos { --s3u-accent: #1664ff; }
+.s3u__provider--qiniuKodo { --s3u-accent: #00a3ff; }
+.s3u__provider--minio { --s3u-accent: #c72e49; }
+.s3u__provider--cloudflareR2 { --s3u-accent: #f6821f; }
+.s3u__provider--awsS3 { --s3u-accent: #ff9900; }
+
+.s3u__badge {
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+}
+
+.s3u__badge--error {
+    color: var(--b3-theme-error);
+    background: color-mix(in srgb, var(--b3-theme-error) 12%, transparent);
+}
+
+/* ---------- 卡片 ---------- */
+
+.s3u__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+    gap: 12px;
+}
+
+.s3u__card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 10px;
+    background: var(--b3-theme-background);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.s3u__card:hover {
+    border-color: color-mix(in srgb, var(--b3-theme-primary) 45%, var(--b3-border-color));
+    box-shadow: 0 2px 10px color-mix(in srgb, var(--b3-theme-on-background) 6%, transparent);
+}
+
+.s3u__card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.s3u__bucket {
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.s3u__card-provider {
+    flex: 0 0 auto;
+    color: var(--b3-theme-on-surface);
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+.s3u__card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.s3u__storage-value {
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+}
+
+.s3u__storage-label {
+    margin-top: 2px;
+    color: var(--b3-theme-on-surface);
+    font-size: 12px;
+    opacity: 0.75;
+}
+
+.s3u__metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 14px;
+}
+
+.s3u__metric {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.s3u__metric-label {
+    color: var(--b3-theme-on-surface);
+    font-size: 11px;
+    opacity: 0.75;
+}
+
+.s3u__metric-label--unsupported {
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+}
+
+.s3u__metric-value {
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.s3u__classes {
+    border-top: 1px dashed var(--b3-border-color);
+    padding-top: 8px;
+}
+
+.s3u__classes summary {
+    cursor: pointer;
+    color: var(--b3-theme-on-surface);
+    font-size: 12px;
+}
+
+.s3u__table {
+    width: 100%;
+    margin-top: 6px;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.s3u__table th,
+.s3u__table td {
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--b3-border-color);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.s3u__table th:not(:first-child),
+.s3u__table td:not(:first-child) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.s3u__table th {
+    color: var(--b3-theme-on-surface);
+    font-weight: 500;
+    opacity: 0.75;
+}
+
+.s3u__meta,
+.s3u__notes {
+    color: var(--b3-theme-on-surface);
+    font-size: 11px;
+    opacity: 0.75;
+}
+
+.s3u__notes {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.s3u__note::before {
+    content: "· ";
+}
+
+/* ---------- 加载 / 错误 / 空状态 ---------- */
+
+.s3u__skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.s3u__skeleton-line {
+    height: 12px;
+    border-radius: 4px;
+    background: var(--b3-border-color);
+    opacity: 0.55;
+    animation: s3u-pulse 1.4s ease-in-out infinite;
+}
+
+.s3u__skeleton-line--big {
+    width: 55%;
+    height: 26px;
+}
+
+@keyframes s3u-pulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 0.7; }
+}
+
+.s3u__error {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--b3-theme-error) 7%, transparent);
+}
+
+.s3u__error-title {
+    color: var(--b3-theme-error);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.s3u__error-text {
+    color: var(--b3-theme-on-surface);
+    font-size: 12px;
+    word-break: break-word;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.s3u__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 56px 20px;
+    text-align: center;
+}
+
+.s3u__empty-title {
+    font-size: 17px;
+    font-weight: 600;
+}
+
+.s3u__empty-desc {
+    max-width: 460px;
+    color: var(--b3-theme-on-surface);
+    font-size: 13px;
+}
+
+.s3u__empty-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 4px;
+}
+
+.s3u__empty-inline {
+    padding: 10px 0;
+    color: var(--b3-theme-on-surface);
+    font-size: 12px;
+    opacity: 0.75;
+}
+
+/* ---------- 数据源管理 ---------- */
+
+.s3u__settings-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.s3u__settings-title {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.s3u__source-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.s3u__source-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 8px;
+    background: var(--b3-theme-background);
+}
+
+.s3u__source-info {
+    min-width: 0;
+}
+
+.s3u__source-name {
+    font-size: 13px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.s3u__source-meta {
+    margin-top: 2px;
+    color: var(--b3-theme-on-surface);
+    font-size: 11px;
+    opacity: 0.75;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.s3u__source-actions {
+    display: flex;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+.s3u__editor {
+    margin-top: 16px;
+    padding: 14px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 10px;
+    background: var(--b3-theme-surface);
+}
+
+.s3u__editor-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.s3u__editor-title {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.s3u__link {
+    font-size: 12px;
+}
+
+.s3u__check-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    cursor: pointer;
+}
+
+.s3u__field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 7px 0;
+}
+
+.s3u__field > .b3-label__text {
+    color: var(--b3-theme-on-surface);
+    font-size: 12px;
+}
+
+.s3u__field-body {
+    width: 100%;
+}
+
+.s3u__hint {
+    margin-top: 3px;
+    color: var(--b3-theme-on-surface);
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+.s3u__sync-hint {
+    padding: 0 0 4px 2px;
+}
+
+.s3u__textarea {
+    min-height: 72px;
+    resize: vertical;
+    font-family: var(--b3-font-family-code);
+}
+
+.s3u__status {
+    min-height: 0;
+    margin-top: 6px;
+    font-size: 12px;
+    word-break: break-word;
+}
+
+.s3u__status:empty {
+    display: none;
+}
+
+.s3u__status[data-kind="error"] {
+    color: var(--b3-theme-error);
+}
+
+.s3u__status[data-kind="success"] {
+    color: var(--b3-theme-success);
+}
+
+.s3u__status[data-kind="info"] {
+    color: var(--b3-theme-on-surface);
+}
+
+.s3u__editor-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.s3u__settings-note,
+.s3u__encryption-note {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--b3-border-color);
+    color: var(--b3-theme-on-surface);
+    font-size: 11px;
+    opacity: 0.75;
+}
+
+@media (max-width: 560px) {
+    .s3u-dialog .b3-dialog__content {
+        max-height: 82vh;
+    }
+
+    .s3u__toolbar {
+        padding: 12px 14px 10px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .s3u__toolbar-actions {
+        justify-content: flex-end;
+    }
+
+    .s3u__content,
+    .s3u__settings {
+        padding: 12px 14px 20px;
+    }
+
+    .s3u__grid {
+        grid-template-columns: 1fr;
+    }
+
+    .s3u__source-row {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
