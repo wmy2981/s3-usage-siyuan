@@ -36,7 +36,7 @@ View bucket usage of S3-compatible object storage inside SiYuan: storage size, o
 
 ## Setup
 
-1. Enable the plugin and click the cloud-chart icon in the top bar, or run the command **View S3 bucket usage**.
+1. Enable the plugin and click its button in the top bar, or run the command **View S3 bucket usage**.
 2. Click the gear icon in the top right to open **Data sources**, then click **+** to add one.
 3. Choose a provider, fill in the endpoint / region / bucket names, and enter the credentials.
    - Multiple buckets: one per line, or comma-separated.

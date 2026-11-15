@@ -6,7 +6,6 @@
 import {Plugin} from "siyuan";
 import {DEFAULT_SETTINGS, type PluginSettings} from "./config";
 import {makeT, type T} from "./i18n";
-import {ICON_ID, ICON_SVG} from "./icons";
 import {loadSettings, saveSettings} from "./settings-store";
 import {UsageDialog} from "./ui/usage-dialog";
 import "./index.scss";
@@ -22,7 +21,6 @@ export default class S3UsagePlugin extends Plugin {
     async onload(): Promise<void> {
         this.t = makeT(this.i18n ?? {});
         this.settings = await loadSettings(this);
-        this.addIcons(ICON_SVG);
         this.addCommand({
             langKey: COMMAND_KEY,
             callback: () => this.openUsage(),
@@ -32,7 +30,7 @@ export default class S3UsagePlugin extends Plugin {
     async onLayoutReady(): Promise<void> {
         this.addTopBar({
             id: TOP_BAR_ID,
-            icon: ICON_ID,
+            icon: "iconDatabase",
             title: this.t("topbar"),
             position: "right",
             callback: () => this.openUsage(),
