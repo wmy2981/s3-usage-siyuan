@@ -14,7 +14,7 @@
 | `npm run build` | Vite 生产构建 + `scripts/build-package.mjs` 生成 `dist/` 与 `package.zip` |
 | `npm run verify:package` | 校验 zip 必需文件、扁平布局与图片体积 |
 | `npm run render:icon` | `assets/icon.svg` → `assets/icon.png` |
-| `npm run render:preview` | `assets/preview.html` → `assets/preview.png`（需要 Chromium） |
+| `npm run render:preview` | `assets/preview.html` + 本机思源的 CSS → `assets/preview.png`（需要 Chromium 与本机安装的思源） |
 
 `npm run dev` 是 watch 构建，只用于本地开发；验证时不要启动。
 
@@ -43,6 +43,7 @@ tests/                  纯函数测试，不依赖思源实例
 - 手动凭据不得明文落盘。加密不可用时保存直接失败；旧密文解不开时保留密文并提示重填，不回退明文。
 - `saveData` 后必须 `loadData` 读回校验（`settings-store.ts`）。
 - 所有 UI 颜色/边框/字体使用 `--b3-*` 变量；对话框容器与滚动正文常驻 `will-change: transform`，打开时禁止程序性聚焦输入框。
+- 预览图必须用思源本体 CSS 渲染：`assets/preview.html` 只放与 `ui/*.ts` 一致的 DOM，样式由 `scripts/render-preview.mjs` 从本机安装的思源注入（`SIYUAN_RESOURCES` 可覆盖路径），不要手写近似样式。
 - `plugin.json` 的 `name`、仓库名、安装目录名保持一致；`dev` 分支不发布，CD 只由 `main` 触发。
 
 ## 服务商实现备注
