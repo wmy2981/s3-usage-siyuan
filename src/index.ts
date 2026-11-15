@@ -64,13 +64,10 @@ export default class S3UsagePlugin extends Plugin {
                 settings: this.settings,
                 onSave: (next) => this.persist(next),
                 onReload: () => this.reload(),
-                startInSources: sources,
             });
         }
-        this.dialog.open();
-        if (sources) {
-            this.dialog.showSources();
-        } else {
+        this.dialog.open(sources ? "sources" : "usage");
+        if (!sources) {
             this.dialog.focus();
         }
     }

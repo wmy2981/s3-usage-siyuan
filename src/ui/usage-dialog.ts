@@ -35,7 +35,6 @@ export interface UsageDialogOptions {
     settings: PluginSettings;
     onSave: (settings: PluginSettings) => Promise<PluginSettings>;
     onReload: () => Promise<PluginSettings>;
-    startInSources?: boolean;
 }
 
 export class UsageDialog {
@@ -45,7 +44,7 @@ export class UsageDialog {
     private readonly onReload: () => Promise<PluginSettings>;
     private dialog?: Dialog;
     private root?: HTMLElement;
-    private view: "usage" | "sources";
+    private view: "usage" | "sources" = "usage";
     private results = new Map<string, BucketResult>();
     private editing?: DataSource;
     private adding = false;
@@ -56,13 +55,29 @@ export class UsageDialog {
         this.settings = options.settings;
         this.onSave = options.onSave;
         this.onReload = options.onReload;
-        this.view = options.startInSources ? "sources" : "usage";
     }
 
-    open(): void {
+    /**
+     * 打开对话框并落到指定视图：命令面板和顶栏固定进仪表盘，
+     * 插件设置按钮才进数据源管理。关闭后再次打开按本次入口重新决定视图。
+     */
+    open(view: "usage" | "sources" = "usage"): void {
         if (this.dialog) {
+            if (this.view === view) {
+                return;
+            }
+            this.view = view;
+            this.editing = undefined;
+            this.adding = view === "sources" && this.settings.sources.length === 0;
+            this.render();
+            if (view === "usage" && this.results.size === 0) {
+                void this.refreshAll();
+            }
             return;
         }
+        this.view = view;
+        this.editing = undefined;
+        this.adding = view === "sources" && this.settings.sources.length === 0;
         this.dialog = new Dialog({
             title: this.t("dialogTitle"),
             width: "min(1040px, 92vw)",
@@ -90,14 +105,6 @@ export class UsageDialog {
 
     focus(): void {
         this.dialog?.element.querySelector<HTMLElement>(".b3-dialog__container")?.scrollIntoView({block: "nearest"});
-    }
-
-    /** 从插件设置按钮进来时直接切到数据源管理。 */
-    showSources(): void {
-        this.view = "sources";
-        this.editing = undefined;
-        this.adding = this.settings.sources.length === 0;
-        this.render();
     }
 
     destroy(): void {
