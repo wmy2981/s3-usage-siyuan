@@ -8,6 +8,7 @@
 import {hmac, toBase64, utf8} from "../sign/util";
 import {asNumber, jsonPath} from "../xml";
 import {requireAccessKey, requireSecretKey, providerError} from "./helpers";
+import {MONITOR_WINDOW_MS, sumDefined, withMetrics} from "./monitoring";
 import type {ProviderDefinition, StorageClassUsage} from "./types";
 import {ProviderError} from "./types";
 
@@ -110,23 +111,14 @@ function endpointFor(source: Parameters<ProviderDefinition["query"]>[0]["source"
     return DEFAULT_ENDPOINT;
 }
 
-async function queryStat(
+/** 发一次数据统计请求并返回原始响应体；签名覆盖最终 URL 的原始 query。 */
+async function requestQiniu(
     ctx: Parameters<ProviderDefinition["query"]>[0],
-    spec: StatSpec,
+    path: string,
+    params: URLSearchParams,
     endpoint: string,
-): Promise<StatValue> {
-    const begin = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-    const end = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const params = new URLSearchParams({
-        bucket: ctx.bucket,
-        begin: qiniuTime(begin),
-        end: qiniuTime(end),
-        g: "day",
-    });
-    if (ctx.source.region.trim() !== "") {
-        params.set("region", ctx.source.region.trim());
-    }
-    const url = `${endpoint}${spec.path}?${params.toString()}`;
+): Promise<string> {
+    const url = `${endpoint}${path}?${params.toString()}`;
     const parsed = new URL(url);
     const date = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
     const authorization = await qiniuAuthorization(
@@ -146,7 +138,78 @@ async function queryStat(
     if (response.status !== 200) {
         throw providerError(response.status, response.body);
     }
-    return latestValue(response.body);
+    return response.body;
+}
+
+async function queryStat(
+    ctx: Parameters<ProviderDefinition["query"]>[0],
+    spec: StatSpec,
+    endpoint: string,
+): Promise<StatValue> {
+    const begin = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    const end = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const params = new URLSearchParams({
+        bucket: ctx.bucket,
+        begin: qiniuTime(begin),
+        end: qiniuTime(end),
+        g: "day",
+    });
+    if (ctx.source.region.trim() !== "") {
+        params.set("region", ctx.source.region.trim());
+    }
+    return latestValue(await requestQiniu(ctx, spec.path, params, endpoint));
+}
+
+/**
+ * 流量/请求数接口（blob_io、rs_put）返回的是数组：`[{time, values:{flow|hits}}]`。
+ * 这里把窗口内所有点求和；同时兼容旧版 `{times, datas}` 形态，避免版本差异导致解析失败。
+ */
+export function sumQiniuSeries(body: string, field: string): number | undefined {
+    let payload: unknown;
+    try {
+        payload = JSON.parse(body);
+    } catch {
+        throw new ProviderError("Unexpected Qiniu response: not JSON");
+    }
+    if (Array.isArray(payload)) {
+        return sumDefined(payload.map((row) => asNumber(jsonPath(row, "values", field))));
+    }
+    const datas = jsonPath(payload, "datas");
+    if (Array.isArray(datas)) {
+        return sumDefined(datas.map((value) => asNumber(value)));
+    }
+    return undefined;
+}
+
+/** 流量与请求数：外网流出流量 + GET/PUT 请求次数，均为最近 24 小时合计。 */
+async function queryTraffic(
+    ctx: Parameters<ProviderDefinition["query"]>[0],
+    endpoint: string,
+): Promise<{trafficOutBytes?: number; requestCount?: number}> {
+    const begin = qiniuTime(new Date(Date.now() - MONITOR_WINDOW_MS));
+    const end = qiniuTime(new Date());
+    const region = ctx.source.region.trim();
+    const call = async (path: string, select: string, metric: string | undefined, field: string) => {
+        const params = new URLSearchParams({begin, end, g: "hour", select});
+        if (metric !== undefined) {
+            params.set("$metric", metric);
+        }
+        params.set("$bucket", ctx.bucket);
+        if (region !== "") {
+            params.set("$region", region);
+        }
+        return sumQiniuSeries(await requestQiniu(ctx, path, params, endpoint), field);
+    };
+    const [outflow, getHits, putHits] = await mapLimit(
+        [
+            {path: "/v6/blob_io", select: "flow", metric: "flow_out", field: "flow"},
+            {path: "/v6/blob_io", select: "hits", metric: "hits", field: "hits"},
+            {path: "/v6/rs_put", select: "hits", metric: undefined, field: "hits"},
+        ],
+        3,
+        (spec) => call(spec.path, spec.select, spec.metric, spec.field),
+    );
+    return {trafficOutBytes: outflow, requestCount: sumDefined([getHits, putHits])};
 }
 
 async function mapLimit<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
@@ -173,7 +236,11 @@ export const qiniuKodo: ProviderDefinition = {
     bucketHintKey: "sourceBucketPlaceholder",
     async query(ctx) {
         const endpoint = endpointFor(ctx.source);
-        const values = await mapLimit(SPECS, 4, (spec) => queryStat(ctx, spec, endpoint));
+        const notes = ["noteQiniuDelay"];
+        const [values, metrics] = await Promise.all([
+            mapLimit(SPECS, 4, (spec) => queryStat(ctx, spec, endpoint)),
+            withMetrics(() => queryTraffic(ctx, endpoint), notes),
+        ]);
         const classes = new Map<string, StorageClassUsage>();
         let storageBytes = 0;
         let objectCount = 0;
@@ -198,14 +265,22 @@ export const qiniuKodo: ProviderDefinition = {
             }
             classes.set(spec.key, entry);
         });
+        if (metrics.trafficOutBytes !== undefined || metrics.requestCount !== undefined) {
+            notes.push("noteMetricsWindow");
+        }
+        if (metrics.requestCount !== undefined) {
+            notes.push("noteQiniuRequests");
+        }
         return {
             storageBytes: hasStorage ? storageBytes : undefined,
             objectCount: hasObjects ? objectCount : undefined,
+            trafficOutBytes: metrics.trafficOutBytes,
+            requestCount: metrics.requestCount,
             storageClasses: [...classes.values()].filter((item) =>
                 (item.storageBytes ?? 0) > 0 || (item.objectCount ?? 0) > 0
             ),
             dataTime: dataTime > 0 ? dataTime : undefined,
-            notes: ["noteQiniuDelay"],
+            notes,
         };
     },
 };

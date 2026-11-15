@@ -29,7 +29,7 @@ src/
   net.ts                forwardProxy 传输与错误归类
   query.ts              数据源 → 适配器的查询编排
   format.ts             字节/数量/时间格式化
-  sign/                 AWS V4、TC3、OSS V1/V4、通用 HMAC 工具
+  sign/                 AWS V4、TC3、OSS V1/V4、阿里云 RPC、华为 SDK-HMAC-SHA256、MinIO JWT、通用 HMAC 工具
   providers/            八家服务商适配器与注册表
   ui/                   对话框、数据源表单、DOM 工具
   i18n/                 en.json / zh-CN.json
@@ -48,14 +48,14 @@ tests/                  纯函数测试，不依赖思源实例
 
 ## 服务商实现备注
 
-- 阿里云 OSS：默认 OSS4-HMAC-SHA256（2025-09-01 后新建桶不再支持 V1）；403 时回退 V1。V4 的 CanonicalRequest 有 6 段，Canonical URI 带桶名，空值子资源写 `stat`（不补 `=`）。
-- 腾讯云 COS：云监控 Region 固定 `ap-guangzhou`；存储类单位 MB，换算成字节；`x-tc-action` 参与签名时值转小写。
-- 华为云 OBS：原生 V2 签名（HMAC-SHA1，Authorization 标签 `OBS`）；转发层会写 Content-Type，因此按 `application/json` 参与签名。
-- 火山引擎 TOS：TOS4-HMAC-SHA256；密钥派生起点是裸 SK；`?stat` 的 CanonicalQueryString 是 `stat=`。
-- 七牛云：HMAC-SHA1 管理签名，签名串包含方法、原始 query、Host、Content-Type、`X-Qiniu-Date` 和末尾两个换行；URL-safe base64 保留 `=`。
-- MinIO：Admin API `datausageinfo`，字段以 `bucketsUsageInfo` 为准，兼容旧 `bucketsSizes`；返回的是最近一次扫描快照。
+- 阿里云 OSS：默认 OSS4-HMAC-SHA256（2025-09-01 后新建桶不再支持 V1）；403 时回退 V1。V4 的 CanonicalRequest 有 6 段，Canonical URI 带桶名，空值子资源写 `stat`（不补 `=`）。流量/请求数走云监控 `DescribeMetricList`（RPC 签名，`acs_oss_dashboard`，Period=60，24 小时求和）。
+- 腾讯云 COS：云监控 Region 固定 `ap-guangzhou`；存储类单位 MB，换算成字节；`x-tc-action` 参与签名时值转小写。流量/请求数取最近 24 小时求和，存储量仍取最新点。
+- 华为云 OBS：原生 V2 签名（HMAC-SHA1，Authorization 标签 `OBS`）；转发层会写 Content-Type，因此按 `application/json` 参与签名。流量/请求数走 CES `ShowMetricData`（SDK-HMAC-SHA256，CanonicalURI 签名时必须补结尾 `/`），URL 需要项目 ID（填在 Account ID）；请求数由 `request_count_per_second` 乘周期积分。
+- 火山引擎 TOS：TOS4-HMAC-SHA256；密钥派生起点是裸 SK；`?stat` 的 CanonicalQueryString 是 `stat=`。流量/请求数走云监控 `GetMetricData`（service 为 `cloudmonitor`，维度 `ResourceID` 即桶名），带宽与 QPS 为速率，按 1h 周期积分。
+- 七牛云：HMAC-SHA1 管理签名，签名串包含方法、原始 query、Host、Content-Type、`X-Qiniu-Date` 和末尾两个换行；URL-safe base64 保留 `=`。`blob_io` / `rs_put` 返回 `[{time, values}]` 数组，与 `space`/`count` 的 `times`/`datas` 不同。
+- MinIO：Admin API `datausageinfo`，字段以 `bucketsUsageInfo` 为准，兼容旧 `bucketsSizes`；返回的是最近一次扫描快照。流量/请求数来自 Prometheus 桶指标（`/minio/v2/metrics/bucket`，v3 为 `/minio/metrics/v3/bucket/api/<bucket>`），认证是 HS512 JWT（claims `exp/sub/iss=prometheus`，密钥为 Secret Key），数值是自进程启动以来的累计值。
 - Cloudflare R2：GraphQL `r2StorageAdaptiveGroups` / `r2OperationsAdaptiveGroups` / `r2BandwidthUsageAdaptiveGroups`；带宽字段是 `bytesUpload` / `bytesDownload`，请求与流量取最近 24 小时合计。
-- AWS S3：CloudWatch `BucketSizeBytes` 按 StorageType 逐类查询后求和；`NumberOfObjects` 用 `AllStorageTypes`；每日粒度。
+- AWS S3：CloudWatch `BucketSizeBytes` 按 StorageType 逐类查询后求和；`NumberOfObjects` 用 `AllStorageTypes`；每日粒度。请求指标（`AllRequests` / `BytesUploaded` / `BytesDownloaded`）必须先 `ListMetrics` 拿到 `FilterId`，维度是 `BucketName + FilterId`，用 `Sum` 统计最近 24 小时；未启用时返回空数据点。
 
 ## 本地端到端验证（临时实例）
 
@@ -72,5 +72,7 @@ siyuan serve --workspace "<临时工作空间>" --home-dir "<临时用户目录>
 - 只查询用量，不接账单/费用接口。
 - 不自动列举桶；桶名手动填写。
 - 服务商数据均有延迟，不能当计费口径。
-- MinIO 需要 admin 级凭据（`admin:DataUsageInfo`）。
+- 流量/请求数除 MinIO 外统一取最近 24 小时；监控接口失败时保留存储量与对象数，原因写进 notes。
+- MinIO 需要 admin 级凭据（`admin:DataUsageInfo` 与 `admin:Prometheus`），且指标是自启动累计值。
+- 华为云 OBS 需要项目 ID（填在 Account ID）才会查询流量/请求数；AWS S3 需要先为桶启用 CloudWatch 请求指标。
 - Cloudflare R2 的 Analytics 不是计费口径，且不统计小于 100 KiB 的传输。

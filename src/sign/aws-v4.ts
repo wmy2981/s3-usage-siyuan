@@ -31,8 +31,8 @@ export interface AwsV4Options {
     algorithm?: string;
     /** 默认 x-amz-date。 */
     dateHeader?: string;
-    /** 默认 x-amz-content-sha256。 */
-    payloadHeader?: string;
+    /** 默认 x-amz-content-sha256；传 null 表示不写这个头（火山引擎官方示例只签 host 与 x-date）。 */
+    payloadHeader?: string | null;
     /** 签名密钥的前缀，默认 AWS4。 */
     keyPrefix?: string;
     /** scope 终止串，默认 aws4_request。 */
@@ -51,7 +51,7 @@ export async function signAwsV4(options: AwsV4Options): Promise<Record<string, s
     const {amzDate, dateStamp} = amzDateParts(date);
     const algorithm = options.algorithm ?? "AWS4-HMAC-SHA256";
     const dateHeader = options.dateHeader ?? "x-amz-date";
-    const payloadHeader = options.payloadHeader ?? "x-amz-content-sha256";
+    const payloadHeader = options.payloadHeader === null ? null : options.payloadHeader ?? "x-amz-content-sha256";
     const keyPrefix = options.keyPrefix ?? "AWS4";
     const terminal = options.terminal ?? "aws4_request";
 
@@ -59,8 +59,10 @@ export async function signAwsV4(options: AwsV4Options): Promise<Record<string, s
         ...options.headers,
         host: url.host,
         [dateHeader]: amzDate,
-        [payloadHeader]: payloadHash,
     };
+    if (payloadHeader !== null) {
+        headers[payloadHeader] = payloadHash;
+    }
     // 内核会自己写 Content-Length，签名里带上反而会与实际请求不一致
     delete headers["content-length"];
     delete headers["Content-Length"];

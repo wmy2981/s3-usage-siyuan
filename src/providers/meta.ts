@@ -8,6 +8,12 @@ export interface ProviderMeta {
     endpointRequired: boolean;
     regionRequired: boolean;
     accountIdRequired: boolean;
+    /** 需要 Account ID 之外的额外信息时（华为云用项目 ID），显示但不强制。 */
+    accountIdOptional?: boolean;
+    /** 覆盖 Account ID 一栏的标题；缺省用 sourceAccountId。 */
+    accountIdLabelKey?: string;
+    /** Account ID 一栏的说明文字。 */
+    accountIdHintKey?: string;
     accessKeyLabelKey: string;
     secretKeyLabelKey: string;
     secretKeyRequired: boolean;
@@ -57,6 +63,9 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
         endpointRequired: true,
         regionRequired: false,
         accountIdRequired: false,
+        accountIdOptional: true,
+        accountIdLabelKey: "sourceHuaweiProjectId",
+        accountIdHintKey: "sourceHuaweiProjectIdHint",
         accessKeyLabelKey: "providerHuaweiObsToken",
         secretKeyLabelKey: "providerHuaweiObsSecret",
         secretKeyRequired: true,

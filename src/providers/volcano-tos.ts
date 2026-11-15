@@ -7,10 +7,28 @@
  */
 import {signAwsV4} from "../sign/aws-v4";
 import {virtualHostBucketUrl} from "../sign/oss-v1";
-import {numberAt, parseXml, recordAt} from "../xml";
+import {asNumber, jsonPath, numberAt, parseXml, recordAt} from "../xml";
 import {requireAccessKey, requireEndpoint, requireRegion, requireSecretKey, providerError} from "./helpers";
+import {MONITOR_WINDOW_MS, sumDefined, withMetrics} from "./monitoring";
 import type {BucketUsage, ProviderDefinition, StorageClassUsage} from "./types";
 import {ProviderError} from "./types";
+
+const CM_VERSION = "2018-01-01";
+const CM_PERIOD = "1h";
+const HOUR_SECONDS = 3600;
+const MB = 1024 * 1024;
+// 桶维度只有 ResourceID（即桶名），流量是带宽（MB/s）、请求是各 API 的 QPS，
+// 都要按周期积分成总量；指标名取自云监控 VCM_TOS 的指标清单。
+const BANDWIDTH_METRICS = {in: "InternetUploadBandwidthV2", out: "InternetDownloadBandwidthV2"};
+const QPS_METRICS = [
+    "GetObjectQps",
+    "PutObjectQps",
+    "ListObjectsQps",
+    "UploadPartQps",
+    "DeleteObjectQps",
+    "PostObjectQps",
+    "DeleteObjectsQps",
+];
 
 function parseTosStat(body: string): BucketUsage {
     const root = recordAt(parseXml(body), "BucketStat");
@@ -56,6 +74,111 @@ function parseTosStat(body: string): BucketUsage {
     };
 }
 
+/** 云监控返回 `Result.Data.MetricDataResults[].DataPoints[].Value`。 */
+export function parseVolcanoPoints(payload: unknown): number[] {
+    const results = jsonPath(payload, "Result", "Data", "MetricDataResults");
+    if (!Array.isArray(results)) {
+        return [];
+    }
+    const values: number[] = [];
+    for (const result of results) {
+        const points = jsonPath(result, "DataPoints");
+        if (!Array.isArray(points)) {
+            continue;
+        }
+        for (const point of points) {
+            const value = asNumber(jsonPath(point, "Value"));
+            if (value !== undefined) {
+                values.push(value);
+            }
+        }
+    }
+    return values;
+}
+
+/** 查一个 VCM_TOS 指标，返回最近 24 小时按小时聚合的原始值。 */
+async function cmSeries(
+    ctx: Parameters<ProviderDefinition["query"]>[0],
+    subNamespace: string,
+    metricName: string,
+): Promise<number[]> {
+    const region = requireRegion(ctx.source);
+    const end = Math.floor(Date.now() / 1000);
+    const start = end - MONITOR_WINDOW_MS / 1000;
+    const url = `https://cloudmonitor.${region}.volcengineapi.com?Action=GetMetricData&Version=${CM_VERSION}`;
+    const body = JSON.stringify({
+        Namespace: "VCM_TOS",
+        SubNamespace: subNamespace,
+        MetricName: metricName,
+        Period: CM_PERIOD,
+        StartTime: start,
+        EndTime: end,
+        StatisticsMethods: "avg",
+        Instances: [{Dimensions: [{Name: "ResourceID", Value: ctx.bucket}]}],
+    });
+    const headers = await signAwsV4({
+        method: "POST",
+        url,
+        headers: {"content-type": "application/json"},
+        payload: body,
+        service: "cloudmonitor",
+        region,
+        accessKey: requireAccessKey(ctx.source),
+        secretKey: requireSecretKey(ctx.source),
+        algorithm: "HMAC-SHA256",
+        dateHeader: "x-date",
+        // 官方示例只签 host、x-date（以及显式传入的 content-type），不额外写 payload 哈希头
+        payloadHeader: null,
+        keyPrefix: "",
+        terminal: "request",
+    });
+    const response = await ctx.request({
+        url,
+        method: "POST",
+        headers,
+        body,
+        contentType: "application/json",
+    });
+    if (response.status !== 200) {
+        throw providerError(response.status, response.body);
+    }
+    let payload: unknown;
+    try {
+        payload = JSON.parse(response.body);
+    } catch {
+        throw new ProviderError("Unexpected CloudMonitor response: not JSON");
+    }
+    const error = jsonPath(payload, "ResponseMetadata", "Error");
+    if (error) {
+        throw new ProviderError(String(jsonPath(error, "Message") ?? "CloudMonitor query failed"));
+    }
+    return parseVolcanoPoints(payload);
+}
+
+/** 流量与请求数：带宽（MB/s）与 QPS 都按周期积分成 24 小时总量。 */
+async function queryTraffic(
+    ctx: Parameters<ProviderDefinition["query"]>[0],
+): Promise<{trafficInBytes?: number; trafficOutBytes?: number; requestCount?: number}> {
+    const [outgoing, incoming] = await Promise.all([
+        cmSeries(ctx, "bandwidth", BANDWIDTH_METRICS.out),
+        cmSeries(ctx, "bandwidth", BANDWIDTH_METRICS.in),
+    ]);
+    // 单个 API 的指标可能因版本差异不存在，缺哪个就少算哪个，不让整次查询失败
+    const rates = await Promise.all(QPS_METRICS.map(async (name) => {
+        try {
+            return await cmSeries(ctx, "qps", name);
+        } catch {
+            return [];
+        }
+    }));
+    const requestCount = sumDefined(rates.flat().map((rate) => rate * HOUR_SECONDS));
+    return {
+        trafficOutBytes: sumDefined(outgoing.map((rate) => rate * HOUR_SECONDS * MB)),
+        trafficInBytes: sumDefined(incoming.map((rate) => rate * HOUR_SECONDS * MB)),
+        requestCount,
+    };
+}
+
 export const volcanoTos: ProviderDefinition = {
     id: "volcanoTos",
     labelKey: "providerVolcanoTos",
@@ -66,7 +189,8 @@ export const volcanoTos: ProviderDefinition = {
     accessKeyLabelKey: "providerVolcanoTosToken",
     secretKeyRequired: true,
     bucketHintKey: "sourceBucketPlaceholder",
-    async query({source, bucket, request}) {
+    async query(ctx) {
+        const {source, bucket, request} = ctx;
         const endpoint = requireEndpoint(source);
         const region = requireRegion(source);
         const url = virtualHostBucketUrl(endpoint, bucket, "stat");
@@ -95,7 +219,13 @@ export const volcanoTos: ProviderDefinition = {
         if (response.status !== 200) {
             throw providerError(response.status, response.body);
         }
-        return parseTosStat(response.body);
+        const usage = parseTosStat(response.body);
+        const notes = ["noteTosDelay"];
+        const metrics = await withMetrics(() => queryTraffic(ctx), notes);
+        if (metrics.trafficInBytes !== undefined || metrics.trafficOutBytes !== undefined || metrics.requestCount !== undefined) {
+            notes.push("noteMetricsWindow", "noteVolcDerived");
+        }
+        return {...usage, ...metrics, notes};
     },
 };
 

@@ -53,7 +53,7 @@ export async function sha256Hex(value: string): Promise<string> {
 }
 
 export async function hmac(
-    hash: "SHA-1" | "SHA-256",
+    hash: "SHA-1" | "SHA-256" | "SHA-512",
     key: Uint8Array | string,
     value: string,
 ): Promise<Uint8Array<ArrayBuffer>> {
@@ -122,6 +122,28 @@ export function amzDateParts(date: Date): {amzDate: string; dateStamp: string} {
 /** RFC 1123（`Date` 头）时间。 */
 export function rfc1123(date: Date): string {
     return date.toUTCString();
+}
+
+/**
+ * 阿里云 RPC 签名要求的 percentEncode。
+ *
+ * 官方规定在 `encodeURIComponent` 之后再把 `+` 换成 `%20`、`*` 换成 `%2A`、
+ * `%7E` 还原成 `~`；`!'()` 保持不编码，这一点与 AWS 的 `uriEncode` 不同。
+ */
+export function aliyunEncode(value: string): string {
+    return encodeURIComponent(value)
+        .replaceAll("+", "%20")
+        .replaceAll("*", "%2A")
+        .replaceAll("%7E", "~");
+}
+
+/** 签名 nonce；优先用 WebCrypto，退化到时间 + 随机串。 */
+export function randomNonce(): string {
+    const api = typeof crypto === "undefined" ? undefined : crypto;
+    if (api && typeof api.randomUUID === "function") {
+        return api.randomUUID();
+    }
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /** 取 Object 上的字符串字段；不是字符串就当空串。 */

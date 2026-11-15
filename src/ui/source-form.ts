@@ -14,7 +14,7 @@ import {
     type ProviderId,
 } from "../config";
 import type {T} from "../i18n";
-import {PROVIDER_META, PROVIDER_ORDER} from "../providers/meta";
+import {PROVIDER_META, PROVIDER_ORDER, type ProviderMeta} from "../providers/meta";
 import {button, el, fieldRow, icon, iconButton} from "./dom";
 
 export interface SourceFormOptions {
@@ -71,6 +71,7 @@ export class SourceForm {
     private endpointInput!: HTMLInputElement;
     private regionInput!: HTMLInputElement;
     private accountInput!: HTMLInputElement;
+    private accountHint!: HTMLElement;
     private bucketsArea!: HTMLTextAreaElement;
     private accessInput!: HTMLInputElement;
     private secretInput!: HTMLInputElement;
@@ -177,6 +178,8 @@ export class SourceForm {
             this.draft.accountId = this.accountInput.value;
         });
         this.accountRow = fieldRow(this.t("sourceAccountId"), this.accountInput);
+        this.accountHint = el("div", "b3-label__text s3u__hint");
+        this.accountRow.querySelector<HTMLElement>(".s3u__field-body")?.append(this.accountHint);
         root.append(this.accountRow);
 
         this.bucketsArea = textArea(this.draft.buckets.join("\n"), this.t("sourceBucketPlaceholder"));
@@ -221,12 +224,23 @@ export class SourceForm {
         return root;
     }
 
+    /** Account ID 一栏：有的服务商必须填，华为云是可选的「项目 ID」。 */
+    private accountVisible(meta: ProviderMeta): boolean {
+        return meta.accountIdRequired || meta.accountIdOptional === true;
+    }
+
     /** 只改可见性，不销毁控件；隐藏的字段仍然保留用户输入。 */
     private applyProviderVisibility(): void {
         const meta = PROVIDER_META[this.draft.provider];
         this.endpointRow.hidden = !meta.endpointRequired;
         this.regionRow.hidden = !meta.regionRequired;
-        this.accountRow.hidden = !meta.accountIdRequired;
+        this.accountRow.hidden = !this.accountVisible(meta);
+        const accountLabel = this.accountRow.firstElementChild;
+        if (accountLabel instanceof HTMLElement) {
+            accountLabel.textContent = this.t(meta.accountIdLabelKey ?? "sourceAccountId");
+        }
+        this.accountHint.textContent = meta.accountIdHintKey ? this.t(meta.accountIdHintKey) : "";
+        this.accountHint.hidden = !meta.accountIdHintKey;
         this.accessRow.hidden = this.draft.useSyncConfig;
         this.secretRow.hidden = this.draft.useSyncConfig || !meta.secretKeyRequired;
         const accessLabel = this.accessRow.querySelector<HTMLElement>(".b3-label__text");
@@ -246,7 +260,7 @@ export class SourceForm {
         this.secretRow.hidden = sync || !PROVIDER_META[this.draft.provider].secretKeyRequired;
         this.endpointRow.hidden = sync || !PROVIDER_META[this.draft.provider].endpointRequired;
         this.regionRow.hidden = sync || !PROVIDER_META[this.draft.provider].regionRequired;
-        this.accountRow.hidden = sync || !PROVIDER_META[this.draft.provider].accountIdRequired;
+        this.accountRow.hidden = sync || !this.accountVisible(PROVIDER_META[this.draft.provider]);
     }
 
     /** 勾选「复用同步配置」时把当前同步配置带进来，用户仍可改桶名。 */

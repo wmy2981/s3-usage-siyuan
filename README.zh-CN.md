@@ -13,14 +13,14 @@
 
   | 服务商 | 接口 | 存储量 | 对象数 | 流量 | 请求数 |
   | --- | --- | --- | --- | --- | --- |
-  | 阿里云 OSS | `GetBucketStat`（`GET /?stat`） | ✅ | ✅ | — | — |
-  | 腾讯云 COS | 云监控 `GetMonitorData`（`QCE/COS`） | ✅ | ✅ | ✅ | ✅ |
-  | 华为云 OBS | `GetBucketStorageInfo`（`GET /?storageinfo`） | ✅ | ✅ | — | — |
-  | 火山引擎 TOS | `GetBucketStat`（`GET /?stat`） | ✅ | ✅ | — | — |
-  | 七牛云 Kodo | `/v6/space`、`/v6/count` 等同族接口 | ✅ | ✅ | — | — |
-  | MinIO / 自建 S3 | Admin API `datausageinfo` | ✅ | ✅ | — | — |
+  | 阿里云 OSS | `GetBucketStat` + 云监控 `DescribeMetricList` | ✅ | ✅ | ✅（24 小时） | ✅（24 小时） |
+  | 腾讯云 COS | 云监控 `GetMonitorData`（`QCE/COS`） | ✅ | ✅ | ✅（24 小时） | ✅（24 小时） |
+  | 华为云 OBS | `GetBucketStorageInfo` + 云监控 CES `ShowMetricData` | ✅ | ✅ | ✅（24 小时，需项目 ID） | ✅（24 小时，需项目 ID） |
+  | 火山引擎 TOS | `GetBucketStat` + 云监控 `GetMetricData` | ✅ | ✅ | ✅（24 小时，按带宽积分） | ✅（24 小时，按 QPS 积分） |
+  | 七牛云 Kodo | `/v6/space`、`/v6/count` + `/v6/blob_io`、`/v6/rs_put` | ✅ | ✅ | ✅（24 小时，仅流出） | ✅（24 小时，GET + PUT） |
+  | MinIO / 自建 S3 | Admin API `datausageinfo` + Prometheus 桶指标 | ✅ | ✅ | ✅（自启动累计） | ✅（自启动累计） |
   | Cloudflare R2 | GraphQL Analytics（`r2*AdaptiveGroups`） | ✅ | ✅ | ✅（24 小时） | ✅（24 小时） |
-  | AWS S3 | CloudWatch `GetMetricStatistics` | ✅ | ✅ | — | — |
+  | AWS S3 | CloudWatch `GetMetricStatistics` | ✅ | ✅ | ✅（24 小时，需启用请求指标） | ✅（24 小时，需启用请求指标） |
 
 - 总览与存储类型明细同时展示；接口不提供的指标显示 `—`，不会用 0 冒充。
 - 一个账号可以配置多个桶，每个桶一张卡片。
@@ -42,6 +42,10 @@
    - 多个桶：每行一个，或用逗号分隔。
    - 腾讯云 COS 的桶名通常以 `-APPID` 结尾，插件会自动解析 APPID；也可以单独填 **Account ID**。
    - Cloudflare R2 必须填 **Account ID**，API Token 填在 **Access Key**；Token 需要 **Account → Account Analytics → Read** 权限。
+   - 华为云 OBS 建议填 **项目 ID**（控制台「我的凭证 → API 凭证 → 项目列表」），否则只显示存储量与对象数；云监控需要 CES 只读权限。
+   - 火山引擎 TOS 需要云监控读权限；AWS S3 的流量与请求数要先在桶上启用 CloudWatch 请求指标。
+   - 阿里云 OSS 的流量与请求数走云监控，凭据需要 `cms:QueryMetricList`（`AliyunCloudMonitorReadOnlyAccess` 即可）。
+   - MinIO 的流量与请求数来自 Prometheus 指标端点，需要 `admin:Prometheus` 权限（或把指标端点设为公开）。
 4. 保存后立即开始查询。
 5. 想复用思源里已经保存的 S3 配置，点工具栏的下载图标（**导入思源 S3 同步配置**），或在编辑表单里勾选 **使用思源 S3 同步配置**。
 
@@ -65,7 +69,13 @@
   - R2：Analytics 最多覆盖 31 天；请求/流量为最近 24 小时合计。
   - AWS S3：CloudWatch 每天发布一次桶大小。
 - **不自动列举桶。** 桶名手动填写，避免要求每把密钥都有 `ListAllMyBuckets` 权限。
-- 流量/请求数只在服务商提供时展示；见上表。
+- **流量/请求数是监控口径，不是账单口径。** 除 MinIO 外统一取最近 24 小时：
+  - OSS / COS / AWS：对监控数据点求和。
+  - TOS：带宽与 QPS 都是速率，按周期积分成总量，与控制台可能有差异。
+  - OBS：流量本身是周期内总量，请求数由每秒速率积分。
+  - 七牛：请求数为 GET + PUT 次数之和；没有公网流入流量指标。
+  - MinIO：指标是自服务启动以来的累计值，不是 24 小时窗口。
+  - 监控接口调用失败（例如缺权限）时，卡片保留存储量与对象数，并在说明里给出原因。
 
 ## 构建
 

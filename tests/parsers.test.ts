@@ -1,11 +1,11 @@
 import {describe, expect, it} from "vitest";
-import {parseOssStat} from "../src/providers/aliyun-oss";
-import {parseObsStorageInfo} from "../src/providers/huawei-obs";
-import {parseTosStat} from "../src/providers/volcano-tos";
-import {latestCosPoint} from "../src/providers/tencent-cos";
-import {latestQiniuValue} from "../src/providers/qiniu-kodo";
-import {parseMinioUsage} from "../src/providers/minio";
-import {parseAwsDatapoints} from "../src/providers/aws-s3";
+import {parseCmsDatapoints, parseOssStat} from "../src/providers/aliyun-oss";
+import {parseCesDatapoints, parseObsStorageInfo} from "../src/providers/huawei-obs";
+import {parseTosStat, parseVolcanoPoints} from "../src/providers/volcano-tos";
+import {latestCosPoint, summedCosPoint} from "../src/providers/tencent-cos";
+import {latestQiniuValue, sumQiniuSeries} from "../src/providers/qiniu-kodo";
+import {parseMinioMetrics, parseMinioUsage} from "../src/providers/minio";
+import {parseAwsDatapoints, parseAwsSeries, parseListMetricsFilters} from "../src/providers/aws-s3";
 import {parseR2Usage} from "../src/providers/cloudflare-r2";
 
 describe("provider parsers", () => {
@@ -128,5 +128,103 @@ describe("provider parsers", () => {
         expect(usage.trafficInBytes).toBe(11);
         expect(usage.trafficOutBytes).toBe(22);
         expect(usage.dataTime).toBe(Date.parse("2026-11-15T00:00:00Z"));
+    });
+
+    it("parses CloudMonitor Datapoints JSON string", () => {
+        const payload = {
+            Success: true,
+            Datapoints: JSON.stringify([
+                {timestamp: 1767225600000, Average: 10},
+                {timestamp: 1767225660000, Average: 5},
+            ]),
+        };
+        expect(parseCmsDatapoints(payload)).toEqual([10, 5]);
+        expect(parseCmsDatapoints({Success: true, Datapoints: ""})).toEqual([]);
+    });
+
+    it("parses CES datapoints by statistic field", () => {
+        const payload = {
+            datapoints: [
+                {sum: 1024, average: 17, timestamp: 1},
+                {sum: 2048, average: 34, timestamp: 2},
+            ],
+        };
+        expect(parseCesDatapoints(payload, "sum")).toEqual([1024, 2048]);
+        expect(parseCesDatapoints(payload, "average")).toEqual([17, 34]);
+    });
+
+    it("parses Volcengine cloud monitor points", () => {
+        expect(parseVolcanoPoints({
+            Result: {
+                Data: {
+                    MetricDataResults: [
+                        {DataPoints: [{Value: 1.5, Timestamp: 1}, {Value: 2, Timestamp: 2}]},
+                    ],
+                },
+            },
+        })).toEqual([1.5, 2]);
+    });
+
+    it("sums COS datapoints for the monitoring window", () => {
+        expect(summedCosPoint({
+            Response: {DataPoints: [{Timestamps: [1, 2], Values: [10, 5]}, {Timestamps: [3], Values: [1]}]},
+        })).toEqual({value: 16, timestamp: 3});
+        expect(summedCosPoint({Response: {DataPoints: []}})).toEqual({});
+    });
+
+    it("sums Qiniu blob_io series in both response shapes", () => {
+        expect(sumQiniuSeries(
+            '[{"time":"2026-11-14T00:00:00+08:00","values":{"flow":10}},' +
+            '{"time":"2026-11-14T01:00:00+08:00","values":{"flow":5}}]',
+            "flow",
+        )).toBe(15);
+        expect(sumQiniuSeries('{"times":[1,2],"datas":[10,5]}', "flow")).toBe(15);
+    });
+
+    it("parses MinIO Prometheus bucket metrics", () => {
+        const body = [
+            "# HELP minio_bucket_traffic_received_bytes Total bytes received",
+            'minio_bucket_traffic_received_bytes{bucket="photos",server="n:9000"} 1024',
+            'minio_bucket_traffic_sent_bytes{bucket="photos",server="n:9000"} 2048',
+            'minio_bucket_traffic_sent_bytes{bucket="other",server="n:9000"} 999',
+            'minio_bucket_requests_total{bucket="photos",api="PutObject",server="n:9000"} 3',
+            'minio_bucket_requests_total{bucket="photos",api="GetObject",server="n:9000"} 4',
+        ].join("\n");
+        const metrics = parseMinioMetrics(body, "photos");
+        expect(metrics.trafficInBytes).toBe(1024);
+        expect(metrics.trafficOutBytes).toBe(2048);
+        expect(metrics.requestCount).toBe(7);
+        expect(parseMinioMetrics(body, "missing")).toEqual({});
+    });
+
+    it("parses AWS request metric series and FilterId dimensions", () => {
+        expect(parseListMetricsFilters(`<?xml version="1.0" encoding="UTF-8"?>
+<ListMetricsResponse xmlns="http://monitoring.amazonaws.com/doc/2010-08-01/">
+  <ListMetricsResult>
+    <Metrics>
+      <member>
+        <Namespace>AWS/S3</Namespace>
+        <MetricName>AllRequests</MetricName>
+        <Dimensions>
+          <member><Name>BucketName</Name><Value>demo</Value></member>
+          <member><Name>FilterId</Name><Value>EntireBucket</Value></member>
+        </Dimensions>
+      </member>
+    </Metrics>
+  </ListMetricsResult>
+</ListMetricsResponse>`)).toEqual(["EntireBucket"]);
+        expect(parseListMetricsFilters("<ListMetricsResponse><ListMetricsResult><Metrics/></ListMetricsResult></ListMetricsResponse>"))
+            .toEqual([]);
+
+        const series = parseAwsSeries(`<?xml version="1.0" encoding="UTF-8"?>
+<GetMetricStatisticsResponse xmlns="http://monitoring.amazonaws.com/doc/2010-08-01/">
+  <GetMetricStatisticsResult>
+    <Datapoints>
+      <member><Timestamp>2026-11-14T00:00:00Z</Timestamp><Sum>5</Sum></member>
+      <member><Timestamp>2026-11-14T01:00:00Z</Timestamp><Sum>7</Sum></member>
+    </Datapoints>
+  </GetMetricStatisticsResult>
+</GetMetricStatisticsResponse>`, "Sum");
+        expect(series.map((point) => point.value)).toEqual([5, 7]);
     });
 });

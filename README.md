@@ -13,14 +13,14 @@ View bucket usage of S3-compatible object storage inside SiYuan: storage size, o
 
   | Provider | Interface | Storage | Objects | Traffic | Requests |
   | --- | --- | --- | --- | --- | --- |
-  | Alibaba Cloud OSS | `GetBucketStat` (`GET /?stat`) | ✅ | ✅ | — | — |
-  | Tencent Cloud COS | Cloud Monitor `GetMonitorData` (`QCE/COS`) | ✅ | ✅ | ✅ | ✅ |
-  | Huawei Cloud OBS | `GetBucketStorageInfo` (`GET /?storageinfo`) | ✅ | ✅ | — | — |
-  | Volcano Engine TOS | `GetBucketStat` (`GET /?stat`) | ✅ | ✅ | — | — |
-  | Qiniu Kodo | `/v6/space`, `/v6/count` and siblings | ✅ | ✅ | — | — |
-  | MinIO / S3-compatible | Admin API `datausageinfo` | ✅ | ✅ | — | — |
+  | Alibaba Cloud OSS | `GetBucketStat` + CloudMonitor `DescribeMetricList` | ✅ | ✅ | ✅ (24 h) | ✅ (24 h) |
+  | Tencent Cloud COS | Cloud Monitor `GetMonitorData` (`QCE/COS`) | ✅ | ✅ | ✅ (24 h) | ✅ (24 h) |
+  | Huawei Cloud OBS | `GetBucketStorageInfo` + CES `ShowMetricData` | ✅ | ✅ | ✅ (24 h, needs project ID) | ✅ (24 h, needs project ID) |
+  | Volcano Engine TOS | `GetBucketStat` + CloudMonitor `GetMetricData` | ✅ | ✅ | ✅ (24 h, integrated) | ✅ (24 h, integrated) |
+  | Qiniu Kodo | `/v6/space`, `/v6/count` + `/v6/blob_io`, `/v6/rs_put` | ✅ | ✅ | ✅ (24 h, outbound only) | ✅ (24 h, GET + PUT) |
+  | MinIO / S3-compatible | Admin API `datausageinfo` + Prometheus bucket metrics | ✅ | ✅ | ✅ (since start) | ✅ (since start) |
   | Cloudflare R2 | GraphQL Analytics (`r2*AdaptiveGroups`) | ✅ | ✅ | ✅ (24 h) | ✅ (24 h) |
-  | AWS S3 | CloudWatch `GetMetricStatistics` metrics | ✅ | ✅ | — | — |
+  | AWS S3 | CloudWatch `GetMetricStatistics` | ✅ | ✅ | ✅ (24 h, request metrics required) | ✅ (24 h, request metrics required) |
 
 - Generic and per-storage-class numbers; unavailable metrics are shown as `—` instead of `0`.
 - Multiple buckets per account, one card per bucket.
@@ -42,6 +42,10 @@ View bucket usage of S3-compatible object storage inside SiYuan: storage size, o
    - Multiple buckets: one per line, or comma-separated.
    - For Tencent COS the bucket name normally ends with `-APPID`; the APPID is parsed automatically, or you can fill in **Account ID**.
    - For Cloudflare R2, **Account ID** is required and the API token goes into **Access Key**; the token needs **Account → Account Analytics → Read**.
+   - For Huawei Cloud OBS, fill in the **project ID** (console: My Credentials → API Credentials → Projects); without it only storage and object counts are shown. CES read access is required.
+   - Volcano Engine TOS needs CloudMonitor read access; AWS S3 needs CloudWatch request metrics enabled on the bucket.
+   - Alibaba Cloud OSS traffic and requests go through CloudMonitor, so the key needs `cms:QueryMetricList` (`AliyunCloudMonitorReadOnlyAccess` is enough).
+   - MinIO traffic and requests come from the Prometheus metrics endpoint and need `admin:Prometheus` (or a public metrics endpoint).
 4. Save. The first query starts immediately.
 5. To reuse the S3 configuration already saved in SiYuan, click the download icon (**Import SiYuan S3 sync configuration**) or tick **Use the SiYuan S3 sync configuration** in the editor.
 
@@ -65,7 +69,13 @@ Manual credentials are encrypted with AES-256-GCM. The encryption key is derived
   - R2: Analytics covers at most 31 days; request/traffic values are the last 24 hours.
   - AWS S3: CloudWatch publishes bucket size once per day.
 - **No bucket auto-discovery.** Enter bucket names manually; this avoids requiring `ListAllMyBuckets` on every key.
-- Traffic/request metrics are only available where the provider exposes them; see the table above.
+- **Traffic and requests are monitoring figures, not billing figures.** Except for MinIO they cover the last 24 hours:
+  - OSS / COS / AWS: data points are summed.
+  - TOS: bandwidth and QPS are rates and are integrated over the window, so numbers may differ from the console.
+  - OBS: traffic is already a per-period total; requests are integrated from the per-second rate.
+  - Qiniu: requests are GET + PUT counts; there is no inbound traffic metric.
+  - MinIO: metrics are cumulative since the server started, not a 24-hour window.
+  - If the monitoring call fails (for example due to missing permissions), the card keeps storage and object counts and shows the reason in the notes.
 
 ## Build
 

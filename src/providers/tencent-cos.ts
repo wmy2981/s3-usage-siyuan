@@ -8,6 +8,7 @@
 import {signTc3} from "../sign/tencent-tc3";
 import {asNumber, jsonPath} from "../xml";
 import {cosAppId, requireAccessKey, requireSecretKey} from "./helpers";
+import {MONITOR_WINDOW_MS, sumDefined} from "./monitoring";
 import type {ProviderDefinition, StorageClassUsage} from "./types";
 import {ProviderError} from "./types";
 
@@ -64,6 +65,36 @@ function latestPoint(payload: unknown): MetricPoint {
     return best;
 }
 
+/** 把一个时间窗口内的全部数据点求和；流量与请求数用这个口径。 */
+export function summedCosPoint(payload: unknown): MetricPoint {
+    const dataPoints = jsonPath(payload, "Response", "DataPoints");
+    if (!Array.isArray(dataPoints)) {
+        return {};
+    }
+    const values: (number | undefined)[] = [];
+    let timestamp = 0;
+    for (const point of dataPoints) {
+        const timestamps = jsonPath(point, "Timestamps");
+        const points = jsonPath(point, "Values");
+        if (!Array.isArray(points)) {
+            continue;
+        }
+        for (let index = 0; index < points.length; index++) {
+            const value = asNumber(points[index]);
+            if (value === undefined) {
+                continue;
+            }
+            values.push(value);
+            const time = Array.isArray(timestamps) ? asNumber(timestamps[index]) : undefined;
+            if (time !== undefined && time > timestamp) {
+                timestamp = time;
+            }
+        }
+    }
+    const total = sumDefined(values);
+    return total === undefined ? {} : {value: total, timestamp: timestamp > 0 ? timestamp : undefined};
+}
+
 function errorOf(payload: unknown): string {
     const error = jsonPath(payload, "Response", "Error");
     if (!error || typeof error !== "object") {
@@ -79,9 +110,10 @@ async function getMetric(
     metric: string,
     bucket: string,
     appId: string,
+    options: {windowMs?: number; sum?: boolean} = {},
 ): Promise<MetricPoint> {
     const end = new Date();
-    const start = new Date(end.getTime() - WINDOW_MS);
+    const start = new Date(end.getTime() - (options.windowMs ?? WINDOW_MS));
     const payload = JSON.stringify({
         Namespace: "QCE/COS",
         MetricName: metric,
@@ -126,7 +158,7 @@ async function getMetric(
     if (message !== "") {
         throw new ProviderError(message);
     }
-    return latestPoint(parsed);
+    return options.sum === true ? summedCosPoint(parsed) : latestPoint(parsed);
 }
 
 /** 并发上限：腾讯云默认 50 次/秒，这里压到 4 条并发，避免一个桶就把额度打满。 */
@@ -166,9 +198,17 @@ export const tencentCos: ProviderDefinition = {
             (spec) => getMetric(ctx, spec.objectMetric ?? "", ctx.bucket, appId),
         );
         const [multipart, inbound, outbound, requests] = await mapLimit(
-            ["StdMultipartNumber", "InboundTraffic", "InternetTraffic", "TotalRequests"],
+            [
+                {metric: "StdMultipartNumber", sum: false},
+                {metric: "InboundTraffic", sum: true},
+                {metric: "InternetTraffic", sum: true},
+                {metric: "TotalRequests", sum: true},
+            ],
             4,
-            (metric) => getMetric(ctx, metric, ctx.bucket, appId),
+            (spec) => getMetric(ctx, spec.metric, ctx.bucket, appId, {
+                sum: spec.sum,
+                windowMs: spec.sum ? MONITOR_WINDOW_MS : undefined,
+            }),
         );
 
         const classes: StorageClassUsage[] = [];
@@ -200,6 +240,10 @@ export const tencentCos: ProviderDefinition = {
                 });
             }
         });
+        const notes = ["noteCosDelay"];
+        if (inbound.value !== undefined || outbound.value !== undefined || requests.value !== undefined) {
+            notes.push("noteMetricsWindow");
+        }
         return {
             storageBytes: hasStorage ? storageBytes : undefined,
             objectCount: hasObjects ? objectCount : undefined,
@@ -209,7 +253,7 @@ export const tencentCos: ProviderDefinition = {
             requestCount: requests.value,
             storageClasses: classes,
             dataTime: dataTime > 0 ? dataTime : undefined,
-            notes: ["noteCosDelay"],
+            notes,
         };
     },
 };
