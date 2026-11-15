@@ -55,6 +55,7 @@ export async function loadSettings(plugin: Plugin): Promise<PluginSettings> {
     return {
         version: 1,
         timeoutSeconds: stored.timeoutSeconds,
+        refreshMinutes: stored.refreshMinutes,
         sources,
     };
 }
@@ -107,6 +108,7 @@ export async function saveSettings(plugin: Plugin, settings: PluginSettings): Pr
     const stored = {
         version: 1 as const,
         timeoutSeconds: next.timeoutSeconds,
+        refreshMinutes: next.refreshMinutes,
         sources: storedSources,
     };
     const response = await plugin.saveData(STORAGE_NAME, stored) as {code?: number; msg?: string} | undefined;

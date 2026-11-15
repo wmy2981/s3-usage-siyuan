@@ -45,12 +45,15 @@ export interface DataSource extends StoredSource {
 export interface StoredSettings {
     version: 1;
     timeoutSeconds: number;
+    /** 自动刷新间隔（分钟）；0 表示只在手动点击时刷新。 */
+    refreshMinutes: number;
     sources: StoredSource[];
 }
 
 export interface PluginSettings {
     version: 1;
     timeoutSeconds: number;
+    refreshMinutes: number;
     sources: DataSource[];
 }
 
@@ -58,9 +61,13 @@ export const DEFAULT_TIMEOUT_SECONDS = 30;
 export const MIN_TIMEOUT_SECONDS = 5;
 export const MAX_TIMEOUT_SECONDS = 300;
 
+/** 自动刷新只提供固定档位，避免用户填出 1 分钟这种会打满监控接口的值。 */
+export const REFRESH_MINUTES_OPTIONS = [0, 5, 10, 30] as const;
+
 export const DEFAULT_SETTINGS: PluginSettings = {
     version: 1,
     timeoutSeconds: DEFAULT_TIMEOUT_SECONDS,
+    refreshMinutes: 0,
     sources: [],
 };
 
@@ -212,9 +219,12 @@ export function mergeStoredSettings(raw: unknown): StoredSettings {
         });
     }
     const timeout = Math.round(numberIn(value.timeoutSeconds, DEFAULT_TIMEOUT_SECONDS));
+    const refresh = Math.round(numberIn(value.refreshMinutes, 0));
     return {
         version: 1,
         timeoutSeconds: Math.min(MAX_TIMEOUT_SECONDS, Math.max(MIN_TIMEOUT_SECONDS, timeout)),
+        // 旧配置没有这个字段；非法档位一律回到「不自动刷新」
+        refreshMinutes: (REFRESH_MINUTES_OPTIONS as readonly number[]).includes(refresh) ? refresh : 0,
         sources,
     };
 }

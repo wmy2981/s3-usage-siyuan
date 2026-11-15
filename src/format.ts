@@ -32,6 +32,23 @@ export function formatTimestamp(timestamp: number | undefined): string {
     return new Date(timestamp).toLocaleString();
 }
 
+/**
+ * 卡片上的更新时间：当天只显示 HH:mm，跨天补上 MM-DD。
+ * 用本地时钟手工拼接，避免不同系统 locale 下出现 12 小时制或多余秒。
+ */
+export function formatUpdatedAt(timestamp: number, now = Date.now()): string {
+    if (!timestamp || !Number.isFinite(timestamp)) {
+        return "—";
+    }
+    const date = new Date(timestamp);
+    const current = new Date(now);
+    const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    const sameDay = date.getFullYear() === current.getFullYear()
+        && date.getMonth() === current.getMonth()
+        && date.getDate() === current.getDate();
+    return sameDay ? time : `${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${time}`;
+}
+
 /** 把错误对象变成一句可展示的文本。 */
 export function errorText(error: unknown): string {
     if (error instanceof Error) {

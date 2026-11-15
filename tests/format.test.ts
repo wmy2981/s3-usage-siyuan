@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {formatBytes, formatCount, formatTimestamp} from "../src/format";
+import {formatBytes, formatCount, formatTimestamp, formatUpdatedAt} from "../src/format";
 
 describe("format", () => {
     it("formats bytes with 1024 units", () => {
@@ -18,5 +18,12 @@ describe("format", () => {
     it("formats timestamps defensively", () => {
         expect(formatTimestamp(0)).toBe("—");
         expect(formatTimestamp(1643341269000)).not.toBe("—");
+    });
+
+    it("shows the update time with a date only across days", () => {
+        const fetchedAt = new Date(2026, 10, 15, 19, 1).getTime();
+        expect(formatUpdatedAt(fetchedAt, new Date(2026, 10, 15, 20, 0).getTime())).toBe("19:01");
+        expect(formatUpdatedAt(fetchedAt, new Date(2026, 10, 16, 8, 0).getTime())).toBe("11-15 19:01");
+        expect(formatUpdatedAt(0)).toBe("—");
     });
 });

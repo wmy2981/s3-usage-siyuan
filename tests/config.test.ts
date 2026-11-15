@@ -48,4 +48,10 @@ describe("config", () => {
         expect(merged.sources).toHaveLength(1);
         expect(merged.sources[0].buckets).toEqual(["x", "y"]);
     });
+
+    it("only accepts the offered auto-refresh intervals", () => {
+        expect(mergeStoredSettings({refreshMinutes: 10}).refreshMinutes).toBe(10);
+        expect(mergeStoredSettings({refreshMinutes: 7}).refreshMinutes).toBe(0);
+        expect(mergeStoredSettings({}).refreshMinutes).toBe(0);
+    });
 });

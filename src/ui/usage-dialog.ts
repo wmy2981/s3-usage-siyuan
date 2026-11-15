@@ -10,6 +10,7 @@ import {
     DEFAULT_TIMEOUT_SECONDS,
     MAX_TIMEOUT_SECONDS,
     MIN_TIMEOUT_SECONDS,
+    REFRESH_MINUTES_OPTIONS,
     newSourceId,
     readSyncS3Config,
     detectProvider,
@@ -20,6 +21,7 @@ import {
     formatBytes,
     formatCount,
     formatTimestamp,
+    formatUpdatedAt,
 } from "../format";
 import type {T} from "../i18n";
 import type {BucketUsage} from "../providers/types";
@@ -29,6 +31,8 @@ import {clear, el, fieldRow, iconButton, labeledIconButton} from "./dom";
 import {renderSourceList, SourceForm} from "./source-form";
 
 const DIALOG_CLASS = "s3u-dialog";
+/** 标签和自动刷新共用一个 30 秒节拍：刷新误差不超过半分钟，也不额外增加定时器。 */
+const TICK_MS = 30_000;
 
 interface BucketResult {
     state: "loading" | "ok" | "error";
@@ -53,6 +57,7 @@ export class UsageDialog {
     private root?: HTMLElement;
     private view: "usage" | "sources" = "usage";
     private renderedView?: "usage" | "sources";
+    private timer?: number;
     private results = new Map<string, BucketResult>();
     private editing?: DataSource;
     private adding = false;
@@ -81,6 +86,7 @@ export class UsageDialog {
             if (view === "usage" && this.results.size === 0) {
                 void this.refreshAll();
             }
+            this.tick();
             return;
         }
         this.view = view;
@@ -92,6 +98,7 @@ export class UsageDialog {
             content: '<div class="b3-dialog__content"><div class="s3u"></div></div>',
             containerClassName: DIALOG_CLASS,
             destroyCallback: () => {
+                this.stopTimer();
                 this.dialog = undefined;
                 this.root = undefined;
             },
@@ -102,6 +109,7 @@ export class UsageDialog {
         }
         // 新对话框从空白开始，重新播一次正文入场动画
         this.renderedView = undefined;
+        this.startTimer();
         // 入场前就把每张卡片搭成骨架，查询结果只替换单张卡片，避免入场期间重排整棵正文
         const needsQuery = this.view === "usage" && this.results.size === 0;
         if (needsQuery) {
@@ -111,6 +119,7 @@ export class UsageDialog {
         if (needsQuery) {
             void this.runQueries();
         }
+        this.tick();
     }
 
     focus(): void {
@@ -118,6 +127,7 @@ export class UsageDialog {
     }
 
     destroy(): void {
+        this.stopTimer();
         this.dialog?.destroy();
         this.dialog = undefined;
         this.root = undefined;
@@ -245,6 +255,74 @@ export class UsageDialog {
         return `${source.id}\u0000${bucket}`;
     }
 
+    private startTimer(): void {
+        this.stopTimer();
+        this.timer = window.setInterval(() => this.tick(), TICK_MS);
+    }
+
+    private stopTimer(): void {
+        if (this.timer !== undefined) {
+            window.clearInterval(this.timer);
+            this.timer = undefined;
+        }
+    }
+
+    /** 30 秒一次：刷新卡片上的时间标签，到点就触发自动刷新。 */
+    private tick(): void {
+        if (!this.root) {
+            return;
+        }
+        const now = Date.now();
+        this.root.querySelectorAll<HTMLElement>(".s3u__card-foot[data-fetched]").forEach((node) => {
+            const fetchedAt = Number(node.dataset.fetched);
+            if (Number.isFinite(fetchedAt) && fetchedAt > 0) {
+                this.updateCardFoot(node, fetchedAt, now);
+            }
+        });
+        if (this.autoRefreshDue(now)) {
+            void this.refreshAll();
+        }
+    }
+
+    private autoRefreshDue(now: number): boolean {
+        if (this.settings.refreshMinutes <= 0 || this.view !== "usage" || this.querying
+            || this.settings.sources.length === 0) {
+            return false;
+        }
+        let oldest = Infinity;
+        for (const source of this.settings.sources) {
+            for (const bucket of source.buckets) {
+                const result = this.results.get(this.cardKey(source, bucket));
+                if (!result || result.state === "loading") {
+                    return false;
+                }
+                oldest = Math.min(oldest, result.fetchedAt);
+            }
+        }
+        return Number.isFinite(oldest) && now - oldest >= this.settings.refreshMinutes * 60_000;
+    }
+
+    /** 卡片底部的「更新于」；过期后变灰，悬停说明原因。 */
+    private cardFoot(result: BucketResult): HTMLElement {
+        const foot = el("div", "s3u__card-foot");
+        foot.dataset.fetched = String(result.fetchedAt);
+        this.updateCardFoot(foot, result.fetchedAt, Date.now());
+        return foot;
+    }
+
+    private updateCardFoot(node: HTMLElement, fetchedAt: number, now: number): void {
+        node.textContent = this.t("cardUpdatedAt", {time: formatUpdatedAt(fetchedAt, now)});
+        const stale = now - fetchedAt > this.staleAfterMs();
+        node.classList.toggle("s3u__card-foot--stale", stale);
+        node.title = stale ? this.t("cardStaleHint") : "";
+    }
+
+    /** 自动刷新间隔留 5 分钟余量，关闭时按 10 分钟判断过期。 */
+    private staleAfterMs(): number {
+        const minutes = this.settings.refreshMinutes;
+        return (minutes > 0 ? minutes + 5 : 10) * 60_000;
+    }
+
     private bucketCard(source: DataSource, bucket: string): HTMLElement {
         const card = el("article", `s3u__card s3u__card--${source.provider}`);
         const head = el("div", "s3u__card-head");
@@ -263,18 +341,22 @@ export class UsageDialog {
         }
         if (result.state === "error") {
             body.append(this.errorBlock(source, bucket, result));
+            card.append(this.cardFoot(result));
             return card;
         }
         const usage = result.usage;
         if (!usage) {
-            body.append(this.errorBlock(source, bucket, {
+            const fallback: BucketResult = {
                 state: "error",
                 error: {kind: "provider", message: this.t("errorUnknown")},
                 fetchedAt: Date.now(),
-            }));
+            };
+            body.append(this.errorBlock(source, bucket, fallback));
+            card.append(this.cardFoot(fallback));
             return card;
         }
         body.append(this.usageBlock(usage));
+        card.append(this.cardFoot(result));
         return card;
     }
 
@@ -496,6 +578,18 @@ export class UsageDialog {
             void this.saveTimeout(next);
         });
         box.append(fieldRow(this.t("queryTimeout"), timeout, this.t("queryTimeoutHint")));
+
+        const refresh = el("select", "b3-select");
+        for (const minutes of REFRESH_MINUTES_OPTIONS) {
+            const option = el("option", "", minutes === 0
+                ? this.t("autoRefreshOff")
+                : this.t("autoRefreshMinutes", {minutes}));
+            option.value = String(minutes);
+            refresh.append(option);
+        }
+        refresh.value = String(this.settings.refreshMinutes);
+        refresh.addEventListener("change", () => void this.saveRefreshMinutes(Number(refresh.value)));
+        box.append(fieldRow(this.t("autoRefresh"), refresh, this.t("autoRefreshHint")));
         return box;
     }
 
@@ -506,6 +600,21 @@ export class UsageDialog {
         try {
             this.settings = await this.onSave({...this.settings, timeoutSeconds});
             showMessage(this.t("settingsSaved"), 2000, "info");
+        } catch (error) {
+            showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
+            this.render();
+        }
+    }
+
+    private async saveRefreshMinutes(refreshMinutes: number): Promise<void> {
+        if (refreshMinutes === this.settings.refreshMinutes) {
+            return;
+        }
+        try {
+            this.settings = await this.onSave({...this.settings, refreshMinutes});
+            showMessage(this.t("settingsSaved"), 2000, "info");
+            // 新档位可能让现有数据立即过期
+            this.tick();
         } catch (error) {
             showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
             this.render();

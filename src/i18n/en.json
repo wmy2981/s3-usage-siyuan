@@ -133,5 +133,11 @@
   "querySettings": "Query settings",
   "queryTimeout": "Query timeout (seconds)",
   "queryTimeoutHint": "5–300 seconds; increase it for slow provider monitoring APIs.",
-  "settingsSaved": "Settings saved"
+  "settingsSaved": "Settings saved",
+  "cardUpdatedAt": "Updated {time}",
+  "cardStaleHint": "This data may be stale; refresh to update.",
+  "autoRefresh": "Auto refresh",
+  "autoRefreshOff": "Off",
+  "autoRefreshMinutes": "Every {minutes} min",
+  "autoRefreshHint": "Only while this dialog is open; data older than the interval is dimmed."
 }
