@@ -20,7 +20,7 @@
   <path d="M42 46C42 39.9 59 35 80 35C101 35 118 39.9 118 46V114C118 121.1 101 125 80 125C59 125 42 121.1 42 114V46Z" fill="#5275DF" opacity="0.28" filter="url(#glow)"/>
   <path d="M42 46C42 39.9 59 35 80 35C101 35 118 39.9 118 46V114C118 121.1 101 125 80 125C59 125 42 121.1 42 114V46Z" fill="url(#bucket)"/>
   <ellipse cx="80" cy="46" rx="38" ry="11" fill="#83A3F2"/>
-  <path d="M42 70C42 76.1 59 81 80 81C101 81 118 76.1 118 70" fill="none" stroke="#183F9E" stroke-width="3"/>
+  <path d="M42 69C42 74.8 59.01 79.5 80 79.5C100.99 79.5 118 74.8 118 69L118 70.5C118 77.13 100.99 82.5 80 82.5C59.01 82.5 42 77.13 42 70.5Z" fill="#183F9E"/>
   <rect x="57" y="94" width="10" height="13" rx="5" fill="url(#usage)"/>
   <rect x="75" y="80" width="10" height="27" rx="5" fill="url(#usage)"/>
   <rect x="93" y="64" width="10" height="43" rx="5" fill="url(#usage)"/>
