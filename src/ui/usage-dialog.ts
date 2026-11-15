@@ -21,7 +21,6 @@ import {
     formatBytes,
     formatCount,
     formatTimestamp,
-    formatUpdatedAt,
 } from "../format";
 import type {T} from "../i18n";
 import type {BucketUsage} from "../providers/types";
@@ -31,7 +30,7 @@ import {clear, el, fieldRow, iconButton, labeledIconButton} from "./dom";
 import {renderSourceList, SourceForm} from "./source-form";
 
 const DIALOG_CLASS = "s3u-dialog";
-/** 标签和自动刷新共用一个 30 秒节拍：刷新误差不超过半分钟，也不额外增加定时器。 */
+/** 自动刷新按 30 秒检查一次，刷新误差不超过半分钟。 */
 const TICK_MS = 30_000;
 
 interface BucketResult {
@@ -284,19 +283,12 @@ export class UsageDialog {
         }
     }
 
-    /** 30 秒一次：刷新卡片上的时间标签，到点就触发自动刷新。 */
+    /** 30 秒一次：到点就触发自动刷新。 */
     private tick(): void {
         if (!this.root) {
             return;
         }
-        const now = Date.now();
-        this.root.querySelectorAll<HTMLElement>(".s3u__card-foot[data-fetched]").forEach((node) => {
-            const fetchedAt = Number(node.dataset.fetched);
-            if (Number.isFinite(fetchedAt) && fetchedAt > 0) {
-                this.updateCardFoot(node, fetchedAt, now);
-            }
-        });
-        if (this.autoRefreshDue(now)) {
+        if (this.autoRefreshDue(Date.now())) {
             void this.refreshAll();
         }
     }
@@ -319,27 +311,6 @@ export class UsageDialog {
         return Number.isFinite(oldest) && now - oldest >= this.settings.refreshMinutes * 60_000;
     }
 
-    /** 卡片底部的「更新于」；过期后变灰，悬停说明原因。 */
-    private cardFoot(result: BucketResult): HTMLElement {
-        const foot = el("div", "s3u__card-foot");
-        foot.dataset.fetched = String(result.fetchedAt);
-        this.updateCardFoot(foot, result.fetchedAt, Date.now());
-        return foot;
-    }
-
-    private updateCardFoot(node: HTMLElement, fetchedAt: number, now: number): void {
-        node.textContent = this.t("cardUpdatedAt", {time: formatUpdatedAt(fetchedAt, now)});
-        const stale = now - fetchedAt > this.staleAfterMs();
-        node.classList.toggle("s3u__card-foot--stale", stale);
-        node.title = stale ? this.t("cardStaleHint") : "";
-    }
-
-    /** 自动刷新间隔留 5 分钟余量，关闭时按 10 分钟判断过期。 */
-    private staleAfterMs(): number {
-        const minutes = this.settings.refreshMinutes;
-        return (minutes > 0 ? minutes + 5 : 10) * 60_000;
-    }
-
     private bucketCard(source: DataSource, bucket: string): HTMLElement {
         const card = el("article", `s3u__card s3u__card--${source.provider}`);
         const head = el("div", "s3u__card-head");
@@ -359,7 +330,6 @@ export class UsageDialog {
         }
         if (result.state === "error") {
             body.append(this.errorBlock(source, bucket, result));
-            card.append(this.cardFoot(result));
             return card;
         }
         const usage = result.usage;
@@ -370,11 +340,9 @@ export class UsageDialog {
                 fetchedAt: Date.now(),
             };
             body.append(this.errorBlock(source, bucket, fallback));
-            card.append(this.cardFoot(fallback));
             return card;
         }
         body.append(this.usageBlock(usage));
-        card.append(this.cardFoot(result));
         return card;
     }
 

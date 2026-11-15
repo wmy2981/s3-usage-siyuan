@@ -23,7 +23,7 @@ View bucket usage of S3-compatible object storage inside SiYuan: storage size, o
   | AWS S3 | CloudWatch `GetMetricStatistics` | ✅ | ✅ | ✅ (24 h, request metrics required) | ✅ (24 h, request metrics required) |
 
 - Generic and per-storage-class numbers; unavailable metrics are shown as `—` instead of `0`.
-- The data source page exposes the query timeout and auto-refresh interval; each card shows when it was updated and dims when stale.
+- The data source page exposes the query timeout and auto-refresh interval.
 - Saved manual credentials can be cleared explicitly while keeping the data source configuration.
 - Multiple buckets per account, one card per bucket.
 - Credentials encrypted with the SiYuan **data repo key** before being written to the plugin directory; the ciphertext follows workspace sync, so another device with the same repo key can decrypt it.
