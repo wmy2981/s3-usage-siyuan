@@ -47,5 +47,9 @@
   },
   "dependencies": {
     "fast-xml-parser": "^5.12.1"
+  },
+  "overrides": {
+    "glob@>=10.0.0 <10.5.0": "^10.5.0",
+    "minimatch@<11.0.1": "^11.0.5"
   }
 }
