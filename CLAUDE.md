@@ -41,6 +41,7 @@ tests/                  纯函数测试，不依赖思源实例
 - 入口必须是 CommonJS；`siyuan` 在 Vite 中保持 external。
 - 不使用 `fs`、`require("electron")` 等 Node API；持久化只用 `Plugin.loadData/saveData`。
 - 手动凭据不得明文落盘。加密不可用时保存直接失败；旧密文解不开时保留密文并提示重填，不回退明文。
+- 「从思源导入」是独立的一条数据源，全局最多一条：落盘只有 `siyuan.name`，服务商/桶名/地域/凭据每次渲染与查询都从 `window.siyuan.config.sync.s3` 现读；导入入口只在数据源页右上角，导入后只能改名或移除。
 - `saveData` 后必须 `loadData` 读回校验（`settings-store.ts`）。
 - 所有 UI 颜色/边框/字体使用 `--b3-*` 变量；对话框容器与滚动正文常驻 `will-change: transform`，打开时禁止程序性聚焦输入框。
 - 预览图必须用思源本体 CSS 渲染：`assets/preview.html` 只放与 `ui/*.ts` 一致的 DOM，样式由 `scripts/render-preview.mjs` 从本机安装的思源注入（`SIYUAN_RESOURCES` 可覆盖路径），不要手写近似样式。

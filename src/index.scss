@@ -78,7 +78,29 @@
 }
 
 .s3u__toolbar-title {
+    flex: 1 1 auto;
     min-width: 0;
+}
+
+/* 数据源页：顶部文案一行，返回与导入在下一行，分居左右 */
+.s3u__toolbar--sources {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+}
+
+.s3u__toolbar-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.s3u__toolbar-lead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
 }
 
 .s3u__title {
@@ -464,6 +486,44 @@
     width: 96px;
 }
 
+/* 从思源导入的独立区块：只读展示，可改名和移除 */
+.s3u__siyuan {
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 10px;
+    background: var(--b3-theme-surface);
+}
+
+.s3u__siyuan .s3u__settings-head {
+    margin-bottom: 4px;
+}
+
+.s3u__siyuan-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 0 2px;
+    font-size: 12px;
+}
+
+.s3u__siyuan-line {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    word-break: break-all;
+}
+
+.s3u__siyuan-label {
+    flex: 0 0 auto;
+    color: var(--b3-theme-on-surface);
+    opacity: 0.7;
+}
+
+.s3u__siyuan-line--error {
+    color: var(--b3-theme-error);
+}
+
 .s3u__source-list {
     display: flex;
     flex-direction: column;
@@ -534,14 +594,6 @@
     font-size: 12px;
 }
 
-.s3u__check-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 0;
-    cursor: pointer;
-}
-
 .s3u__field {
     display: flex;
     flex-direction: column;
@@ -563,10 +615,6 @@
     color: var(--b3-theme-on-surface);
     font-size: 11px;
     opacity: 0.7;
-}
-
-.s3u__sync-hint {
-    padding: 0 0 4px 2px;
 }
 
 .s3u__textarea {

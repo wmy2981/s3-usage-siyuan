@@ -5,7 +5,38 @@ import {
     normalizeEndpoint,
     parseBucketList,
     regionFromEndpoint,
+    resolveSource,
+    siyuanRuntimeSource,
+    SIYUAN_SOURCE_ID,
 } from "../src/config";
+
+/** 造一份「思源正在用 S3 同步」的宿主环境；返回还原函数。 */
+function stubSiyuanConfig(config: unknown): () => void {
+    const host = globalThis as {window?: unknown};
+    const original = host.window;
+    host.window = {siyuan: {config}};
+    return () => {
+        if (original === undefined) {
+            delete host.window;
+        } else {
+            host.window = original;
+        }
+    };
+}
+
+const S3_SYNC_CONFIG = {
+    sync: {
+        provider: 2,
+        s3: {
+            endpoint: "oss-cn-hangzhou.aliyuncs.com",
+            bucket: "sync-bucket",
+            region: "",
+            accessKey: "SYNC_AK",
+            secretKey: "SYNC_SK",
+        },
+    },
+    repo: {key: ""},
+};
 
 describe("config", () => {
     it("normalizes endpoints with or without a scheme", () => {
@@ -53,5 +84,54 @@ describe("config", () => {
         expect(mergeStoredSettings({refreshMinutes: 10}).refreshMinutes).toBe(10);
         expect(mergeStoredSettings({refreshMinutes: 7}).refreshMinutes).toBe(0);
         expect(mergeStoredSettings({}).refreshMinutes).toBe(0);
+    });
+
+    it("upgrades the legacy siyuan source into a standalone entry", () => {
+        const merged = mergeStoredSettings({
+            sources: [
+                {id: "src-1", name: "SiYuan S3 · a", provider: "minio", buckets: ["a"], useSyncConfig: true},
+                {id: "src-2", name: "B", provider: "minio", buckets: ["b"]},
+                {id: "src-3", name: "另一条", provider: "minio", buckets: ["c"], useSyncConfig: true},
+            ],
+        });
+        // 只能有一条思源导入，其余旧条目直接丢弃
+        expect(merged.sources.map((source) => source.id)).toEqual(["src-2"]);
+        expect(merged.siyuan).toEqual({name: "SiYuan S3 · a"});
+    });
+
+    it("keeps only the name of the siyuan entry", () => {
+        const merged = mergeStoredSettings({sources: [], siyuan: {name: "  我的思源  ", endpoint: "https://x"}});
+        expect(merged.siyuan).toEqual({name: "我的思源"});
+        expect(merged.sources).toEqual([]);
+    });
+
+    it("reads the siyuan entry from the live sync configuration", () => {
+        const restore = stubSiyuanConfig(S3_SYNC_CONFIG);
+        try {
+            const source = siyuanRuntimeSource("自定义名");
+            expect(source.id).toBe(SIYUAN_SOURCE_ID);
+            expect(source.name).toBe("自定义名");
+            expect(source.useSyncConfig).toBe(true);
+            expect(source.provider).toBe("aliyunOss");
+            expect(source.endpoint).toBe("https://oss-cn-hangzhou.aliyuncs.com");
+            expect(source.buckets).toEqual(["sync-bucket"]);
+            // 地域留空时从 Endpoint 推导
+            expect(source.region).toBe("cn-hangzhou");
+            expect(source.accessKey).toBe("SYNC_AK");
+            expect(resolveSource(source)).toEqual(source);
+        } finally {
+            restore();
+        }
+    });
+
+    it("leaves the siyuan entry empty when SiYuan does not sync to S3", () => {
+        const restore = stubSiyuanConfig({sync: {provider: 3, s3: {endpoint: "x", bucket: "y"}}});
+        try {
+            const source = siyuanRuntimeSource("自定义名");
+            expect(source.buckets).toEqual([]);
+            expect(source.endpoint).toBe("");
+        } finally {
+            restore();
+        }
     });
 });

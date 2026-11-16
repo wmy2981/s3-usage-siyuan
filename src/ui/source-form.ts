@@ -5,10 +5,8 @@
  * 这样移动端打开设置面板时不会出现「先空一帧再塞内容」的闪烁。
  */
 import {
-    detectProvider,
     newSourceId,
     parseBucketList,
-    readSyncS3Config,
     regionFromEndpoint,
     type DataSource,
     type ProviderId,
@@ -77,13 +75,11 @@ export class SourceForm {
     private bucketsArea!: HTMLTextAreaElement;
     private accessInput!: HTMLInputElement;
     private secretInput!: HTMLInputElement;
-    private syncCheckbox!: HTMLInputElement;
     private endpointRow!: HTMLElement;
     private regionRow!: HTMLElement;
     private accountRow!: HTMLElement;
     private accessRow!: HTMLElement;
     private secretRow!: HTMLElement;
-    private syncHint!: HTMLElement;
     private status!: HTMLElement;
     private saveButton!: HTMLButtonElement;
     private testButton!: HTMLButtonElement;
@@ -95,11 +91,7 @@ export class SourceForm {
         this.isNew = !options.source;
         this.draft = options.source ? structuredClone(options.source) : emptySource();
         this.element = this.build();
-        if (this.draft.useSyncConfig) {
-            this.fillFromSyncConfig();
-        }
         this.applyProviderVisibility();
-        this.applySyncVisibility();
     }
 
     private build(): HTMLElement {
@@ -129,29 +121,12 @@ export class SourceForm {
         this.providerSelect.addEventListener("change", () => {
             this.draft.provider = this.providerSelect.value as ProviderId;
             this.applyProviderVisibility();
-            this.applySyncVisibility();
             const docs = this.element.querySelector<HTMLAnchorElement>(".s3u__link");
             if (docs) {
                 docs.href = PROVIDER_META[this.draft.provider].docsUrl;
             }
         });
         root.append(fieldRow(this.t("sourceProvider"), this.providerSelect));
-
-        this.syncCheckbox = el("input", "b3-switch fn__flex-center");
-        this.syncCheckbox.type = "checkbox";
-        this.syncCheckbox.checked = this.draft.useSyncConfig;
-        this.syncCheckbox.addEventListener("change", () => {
-            this.draft.useSyncConfig = this.syncCheckbox.checked;
-            if (this.syncCheckbox.checked) {
-                this.fillFromSyncConfig();
-            }
-            this.applySyncVisibility();
-        });
-        const syncRow = el("label", "b3-label s3u__check-row");
-        syncRow.append(this.syncCheckbox, el("span", "b3-label__text", this.t("sourceUseSyncConfig")));
-        root.append(syncRow);
-        this.syncHint = el("div", "s3u__hint s3u__sync-hint", this.t("sourceUseSyncConfigHint"));
-        root.append(this.syncHint);
 
         this.endpointInput = textInput(this.draft.endpoint, "https://oss-cn-hangzhou.aliyuncs.com");
         this.endpointInput.addEventListener("input", () => {
@@ -252,8 +227,7 @@ export class SourceForm {
         }
         this.accountHint.textContent = meta.accountIdHintKey ? this.t(meta.accountIdHintKey) : "";
         this.accountHint.hidden = !meta.accountIdHintKey;
-        this.accessRow.hidden = this.draft.useSyncConfig;
-        this.secretRow.hidden = this.draft.useSyncConfig || !meta.secretKeyRequired;
+        this.secretRow.hidden = !meta.secretKeyRequired;
         const accessLabel = this.accessRow.querySelector<HTMLElement>(".b3-label__text");
         if (accessLabel) {
             accessLabel.textContent = this.t(meta.accessKeyLabelKey);
@@ -262,42 +236,6 @@ export class SourceForm {
         if (secretLabel) {
             secretLabel.textContent = this.t(meta.secretKeyLabelKey);
         }
-    }
-
-    private applySyncVisibility(): void {
-        const sync = this.draft.useSyncConfig;
-        this.syncHint.hidden = !sync;
-        this.accessRow.hidden = sync;
-        this.secretRow.hidden = sync || !PROVIDER_META[this.draft.provider].secretKeyRequired;
-        this.endpointRow.hidden = sync || !PROVIDER_META[this.draft.provider].endpointRequired;
-        this.regionRow.hidden = sync || !PROVIDER_META[this.draft.provider].regionRequired;
-        this.accountRow.hidden = sync || !this.accountVisible(PROVIDER_META[this.draft.provider]);
-    }
-
-    /** 勾选「复用同步配置」时把当前同步配置带进来，用户仍可改桶名。 */
-    private fillFromSyncConfig(): void {
-        const config = readSyncS3Config();
-        if (!config) {
-            this.showStatus(this.t("importMissing"), "error");
-            this.syncCheckbox.checked = false;
-            this.draft.useSyncConfig = false;
-            return;
-        }
-        this.draft.provider = detectProvider(config.endpoint);
-        this.providerSelect.value = this.draft.provider;
-        this.draft.endpoint = config.endpoint;
-        this.endpointInput.value = config.endpoint;
-        this.draft.region = config.region || regionFromEndpoint(config.endpoint, this.draft.provider);
-        this.regionInput.value = this.draft.region;
-        if (this.draft.buckets.length === 0) {
-            this.draft.buckets = [config.bucket];
-            this.bucketsArea.value = config.bucket;
-        }
-        if (this.draft.name.trim() === "") {
-            this.draft.name = `SiYuan S3 · ${config.bucket}`;
-            this.nameInput.value = this.draft.name;
-        }
-        this.applyProviderVisibility();
     }
 
     private showStatus(message: string, kind: "info" | "error" | "success"): void {
@@ -317,7 +255,6 @@ export class SourceForm {
             buckets: parseBucketList(this.bucketsArea.value),
             accessKey: this.accessInput.value.trim(),
             secretKey: this.secretInput.value.trim(),
-            useSyncConfig: this.syncCheckbox.checked,
         };
     }
 
@@ -325,12 +262,6 @@ export class SourceForm {
         const meta = PROVIDER_META[source.provider];
         if (source.buckets.length === 0) {
             return this.t("sourceInvalid", {fields: this.t("sourceBuckets")});
-        }
-        if (source.useSyncConfig) {
-            if (!readSyncS3Config()) {
-                return this.t("importMissing");
-            }
-            return undefined;
         }
         const missing: string[] = [];
         if (meta.endpointRequired && source.endpoint === "") {

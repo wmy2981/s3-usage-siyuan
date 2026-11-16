@@ -1,6 +1,6 @@
 import type {Plugin} from "siyuan";
 import {describe, expect, it} from "vitest";
-import {DEFAULT_SETTINGS, type PluginSettings} from "../src/config";
+import {DEFAULT_SETTINGS, siyuanRuntimeSource, type PluginSettings} from "../src/config";
 import {saveSettings} from "../src/settings-store";
 
 /** 只实现用到的方法，避免为一次保存测试搭整个宿主；tamper 模拟落盘后被改写。 */
@@ -85,5 +85,58 @@ describe("settings store", () => {
         });
         await expect(saveSettings(plugin, settingsWithEmptyCredentials()))
             .rejects.toMatchObject({reason: "verify"});
+    });
+
+    it("stores nothing but the name of the siyuan entry", async () => {
+        const host = globalThis as {window?: unknown};
+        const original = host.window;
+        host.window = {
+            siyuan: {
+                config: {
+                    sync: {
+                        provider: 2,
+                        s3: {
+                            endpoint: "oss-cn-hangzhou.aliyuncs.com",
+                            bucket: "sync-bucket",
+                            accessKey: "SYNC_AK",
+                            secretKey: "SYNC_SK",
+                        },
+                    },
+                },
+            },
+        };
+        try {
+            const {plugin, data} = fakePlugin();
+            const settings = settingsWithEmptyCredentials();
+            settings.sources.push(siyuanRuntimeSource("我的思源"));
+            const saved = await saveSettings(plugin, settings);
+
+            const raw = data() as {sources: unknown[]; siyuan?: {name: string}};
+            expect(raw.siyuan).toEqual({name: "我的思源"});
+            expect(raw.sources).toHaveLength(1);
+            const written = JSON.stringify(raw);
+            expect(written).not.toContain("sync-bucket");
+            expect(written).not.toContain("SYNC_AK");
+            expect(written).not.toContain("SYNC_SK");
+            // 返回给界面的仍是运行时读出来的那份
+            expect(saved.sources[1].buckets).toEqual(["sync-bucket"]);
+        } finally {
+            if (original === undefined) {
+                delete host.window;
+            } else {
+                host.window = original;
+            }
+        }
+    });
+
+    it("drops the siyuan entry once it is removed", async () => {
+        const {plugin, data} = fakePlugin();
+        const settings = settingsWithEmptyCredentials();
+        settings.sources.push(siyuanRuntimeSource("我的思源"));
+        await saveSettings(plugin, settings);
+
+        settings.sources = settings.sources.filter((source) => !source.useSyncConfig);
+        await saveSettings(plugin, settings);
+        expect((data() as {siyuan?: unknown}).siyuan).toBeUndefined();
     });
 });

@@ -9,6 +9,7 @@ import {
     mergeStoredSettings,
     normalizeEndpoint,
     parseBucketList,
+    siyuanRuntimeSource,
     STORAGE_NAME,
     text,
     type DataSource,
@@ -35,12 +36,13 @@ export async function loadSettings(plugin: Plugin): Promise<PluginSettings> {
     for (const source of stored.sources) {
         const runtime: DataSource = {
             ...source,
+            useSyncConfig: false,
             accessKey: "",
             secretKey: "",
             credentialsError: false,
             credentialsErrorReason: "",
         };
-        if (!source.useSyncConfig && source.credentials) {
+        if (source.credentials) {
             const result = await unsealCredentials(source.credentials);
             if (result.status === "ok") {
                 runtime.accessKey = result.credentials.accessKey;
@@ -55,6 +57,9 @@ export async function loadSettings(plugin: Plugin): Promise<PluginSettings> {
             }
         }
         sources.push(runtime);
+    }
+    if (stored.siyuan) {
+        sources.push(siyuanRuntimeSource(stored.siyuan.name));
     }
     return {
         version: 1,
@@ -71,7 +76,6 @@ function sameSource(a: StoredSource, b: StoredSource): boolean {
         && a.endpoint === b.endpoint
         && a.region === b.region
         && a.accountId === b.accountId
-        && a.useSyncConfig === b.useSyncConfig
         && a.credentials === b.credentials
         && a.buckets.length === b.buckets.length
         && a.buckets.every((bucket, index) => bucket === b.buckets[index]);
@@ -82,6 +86,7 @@ function sameStoredSettings(a: StoredSettings, b: StoredSettings): boolean {
     return a.version === b.version
         && a.timeoutSeconds === b.timeoutSeconds
         && a.refreshMinutes === b.refreshMinutes
+        && a.siyuan?.name === b.siyuan?.name
         && a.sources.length === b.sources.length
         && a.sources.every((source, index) => sameSource(source, b.sources[index]));
 }
@@ -90,34 +95,33 @@ function sameStoredSettings(a: StoredSettings, b: StoredSettings): boolean {
  * 保存配置。
  *
  * 手动凭据必须先封成信封；任何一条封不上就整体失败，不写半套配置，
- * 也不把明文落盘。写完读回校验，防止 saveData 提前 resolve 却没真正落盘。
+ * 也不把明文落盘。思源导入那一条只落盘名字，地址与凭据一律不写。
+ * 写完读回校验，防止 saveData 提前 resolve 却没真正落盘。
  */
 export async function saveSettings(plugin: Plugin, settings: PluginSettings): Promise<PluginSettings> {
     const next: PluginSettings = {
         ...settings,
         sources: settings.sources.map((source) => ({...source, buckets: [...source.buckets]})),
     };
+    const manual = next.sources.filter((source) => !source.useSyncConfig);
+    const siyuan = next.sources.find((source) => source.useSyncConfig);
     const storedSources: StoredSource[] = [];
-    for (const source of next.sources) {
+    for (const source of manual) {
         let credentials = source.credentials;
-        if (!source.useSyncConfig) {
-            if (source.accessKey !== "" || source.secretKey !== "") {
-                const sealed = await sealCredentials({
-                    accessKey: source.accessKey,
-                    secretKey: source.secretKey,
-                });
-                if ("failure" in sealed) {
-                    const messages: Record<EncryptFailure, string> = {
-                        noRepoKey: "The SiYuan data repo key is not initialized",
-                        noWebCrypto: "WebCrypto is unavailable in this environment",
-                        failed: "Encryption failed",
-                    };
-                    throw new SettingsError(messages[sealed.failure], sealed.failure);
-                }
-                credentials = sealed.envelope;
+        if (source.accessKey !== "" || source.secretKey !== "") {
+            const sealed = await sealCredentials({
+                accessKey: source.accessKey,
+                secretKey: source.secretKey,
+            });
+            if ("failure" in sealed) {
+                const messages: Record<EncryptFailure, string> = {
+                    noRepoKey: "The SiYuan data repo key is not initialized",
+                    noWebCrypto: "WebCrypto is unavailable in this environment",
+                    failed: "Encryption failed",
+                };
+                throw new SettingsError(messages[sealed.failure], sealed.failure);
             }
-        } else {
-            credentials = undefined;
+            credentials = sealed.envelope;
         }
         storedSources.push({
             id: source.id,
@@ -128,15 +132,16 @@ export async function saveSettings(plugin: Plugin, settings: PluginSettings): Pr
             endpoint: normalizeEndpoint(source.endpoint),
             region: text(source.region),
             accountId: text(source.accountId),
-            useSyncConfig: source.useSyncConfig,
             credentials,
         });
     }
+    const storedSiyuanName = siyuan === undefined ? undefined : text(siyuan.name);
     const stored: StoredSettings = {
         version: 1,
         timeoutSeconds: next.timeoutSeconds,
         refreshMinutes: next.refreshMinutes,
         sources: storedSources,
+        ...(storedSiyuanName === undefined ? {} : {siyuan: {name: storedSiyuanName}}),
     };
     const response = await plugin.saveData(STORAGE_NAME, stored) as {code?: number; msg?: string} | undefined;
     if (response && typeof response.code === "number" && response.code !== 0) {
@@ -149,20 +154,24 @@ export async function saveSettings(plugin: Plugin, settings: PluginSettings): Pr
     return {
         ...next,
         // 返回落盘后的归一化字段，避免内存里仍是未经规范化的 Endpoint
-        sources: next.sources.map((source, index) => {
-            const persisted = stored.sources[index];
-            if (!persisted) {
-                return source;
-            }
-            return {
-                ...source,
-                name: persisted.name,
-                buckets: [...persisted.buckets],
-                endpoint: persisted.endpoint,
-                region: persisted.region,
-                accountId: persisted.accountId,
-                credentials: persisted.credentials,
-            };
-        }),
+        sources: [
+            ...manual.map((source, index) => {
+                const persisted = stored.sources[index];
+                if (!persisted) {
+                    return source;
+                }
+                return {
+                    ...source,
+                    name: persisted.name,
+                    buckets: [...persisted.buckets],
+                    endpoint: persisted.endpoint,
+                    region: persisted.region,
+                    accountId: persisted.accountId,
+                    credentials: persisted.credentials,
+                };
+            }),
+            // 思源导入那一条的其余字段是运行时读出来的，按落盘后的名字重建
+            ...(storedSiyuanName === undefined ? [] : [siyuanRuntimeSource(storedSiyuanName)]),
+        ],
     };
 }

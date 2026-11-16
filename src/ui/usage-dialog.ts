@@ -11,9 +11,9 @@ import {
     MAX_TIMEOUT_SECONDS,
     MIN_TIMEOUT_SECONDS,
     REFRESH_MINUTES_OPTIONS,
-    newSourceId,
     readSyncS3Config,
-    detectProvider,
+    resolveSource,
+    siyuanRuntimeSource,
 } from "../config";
 import {canEncrypt} from "../secret";
 import {
@@ -166,6 +166,8 @@ export class UsageDialog {
         // 只有切页（含首次打开）播入场动画；同一视图内的重绘保持静止，避免每次点按都闪一下
         const switching = this.renderedView !== this.view;
         this.renderedView = this.view;
+        // 思源导入那一条的地址、桶名每次渲染都按当前同步配置现读
+        this.settings = {...this.settings, sources: this.settings.sources.map(resolveSource)};
         clear(this.root);
         if (this.view === "sources") {
             this.renderSources(switching);
@@ -231,11 +233,6 @@ export class UsageDialog {
             this.render();
         });
         actions.append(add);
-        if (readSyncS3Config()) {
-            const importButton = labeledIconButton("b3-button b3-button--outline", "iconDownload", this.t("importSync"));
-            importButton.addEventListener("click", () => void this.importSyncSource());
-            actions.append(importButton);
-        }
         empty.append(actions);
         return empty;
     }
@@ -245,10 +242,11 @@ export class UsageDialog {
         const head = el("div", "s3u__section-head");
         const meta = PROVIDER_META[source.provider];
         const name = el("div", "s3u__section-title");
-        name.append(
-            el("span", `s3u__provider s3u__provider--${source.provider}`, this.t(meta.labelKey)),
-            el("span", "s3u__section-name", source.name || this.t("sourceUnnamed")),
-        );
+        // 思源导入没有可用配置时服务商是猜的，不显示会误导的徽标
+        if (!source.useSyncConfig || source.buckets.length > 0) {
+            name.append(el("span", `s3u__provider s3u__provider--${source.provider}`, this.t(meta.labelKey)));
+        }
+        name.append(el("span", "s3u__section-name", this.sourceLabel(source)));
         head.append(name);
         if (source.credentialsError) {
             head.append(el("span", "s3u__badge s3u__badge--error", this.t("credentialMissing")));
@@ -256,7 +254,8 @@ export class UsageDialog {
         section.append(head);
 
         if (source.buckets.length === 0) {
-            section.append(el("div", "s3u__empty-inline", this.t("noBuckets")));
+            section.append(el("div", "s3u__empty-inline",
+                this.t(source.useSyncConfig ? "importMissing" : "noBuckets")));
             return section;
         }
         const grid = el("div", "s3u__grid");
@@ -473,14 +472,102 @@ export class UsageDialog {
         return translated === key ? item.name : translated;
     }
 
+    /** 从思源导入的那一条；最多一条，没有则返回 undefined。 */
+    private siyuanSource(): DataSource | undefined {
+        return this.settings.sources.find((source) => source.useSyncConfig);
+    }
+
+    private sourceLabel(source: DataSource): string {
+        return source.name
+            || this.t(source.useSyncConfig ? "siyuanImportDefaultName" : "sourceUnnamed");
+    }
+
+    /**
+     * 「从思源导入」的独立区块：只读展示当前同步配置，只允许改名字和移除。
+     *
+     * 除了名字以外什么都不落盘，所以这里展示的每一项都是现读的值。
+     */
+    private siyuanBlock(source: DataSource): HTMLElement {
+        const live = resolveSource(source);
+        const block = el("div", "s3u__siyuan");
+        const head = el("div", "s3u__settings-head");
+        head.append(el("div", "s3u__settings-title", this.t("siyuanImportTitle")));
+        const actions = el("div", "s3u__toolbar-actions");
+        const remove = iconButton("iconTrashcan", this.t("siyuanImportRemove"),
+            "b3-button b3-button--remove b3-button--icon");
+        remove.addEventListener("click", () => this.confirmRemoveSiyuan(source));
+        actions.append(remove);
+        head.append(actions);
+        block.append(head);
+
+        const name = el("input", "b3-text-field fn__block");
+        name.type = "text";
+        name.value = source.name;
+        name.placeholder = this.t("siyuanImportDefaultName");
+        name.autocomplete = "off";
+        name.addEventListener("change", () => void this.saveSiyuanName(name.value));
+        block.append(fieldRow(this.t("siyuanImportName"), name));
+
+        const details = el("div", "s3u__siyuan-meta");
+        const line = (label: string, value: string): void => {
+            const row = el("div", "s3u__siyuan-line");
+            row.append(el("span", "s3u__siyuan-label", label), el("span", "", value));
+            details.append(row);
+        };
+        if (live.buckets.length === 0) {
+            details.append(el("div", "s3u__siyuan-line s3u__siyuan-line--error", this.t("importMissing")));
+        } else {
+            line(this.t("sourceProvider"), this.t(PROVIDER_META[live.provider].labelKey));
+            line(this.t("sourceBuckets"), live.buckets.join(", "));
+            line(this.t("sourceEndpoint"), live.endpoint);
+            if (live.region !== "") {
+                line(this.t("sourceRegion"), live.region);
+            }
+        }
+        block.append(details);
+        block.append(el("div", "s3u__hint", this.t("siyuanImportHint")));
+        return block;
+    }
+
+    private async saveSiyuanName(name: string): Promise<void> {
+        const sources = this.settings.sources.map((source) =>
+            source.useSyncConfig ? {...source, name: name.trim()} : source);
+        try {
+            this.settings = await this.onSave({...this.settings, sources});
+            showMessage(this.t("settingsSaved"), 2000, "info");
+            this.render();
+        } catch (error) {
+            showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
+            this.render();
+        }
+    }
+
+    private confirmRemoveSiyuan(source: DataSource): void {
+        confirm(this.t("siyuanImportRemove"), this.t("siyuanImportRemoveConfirm", {name: this.sourceLabel(source)}), () => {
+            void (async () => {
+                try {
+                    const sources = this.settings.sources.filter((item) => !item.useSyncConfig);
+                    this.settings = await this.onSave({...this.settings, sources});
+                    this.results.clear();
+                    this.render();
+                    showMessage(this.t("siyuanImportRemoved"), 2500, "info");
+                } catch (error) {
+                    showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
+                }
+            })();
+        }, undefined, true);
+    }
+
     private renderSources(animate = false): void {
         if (!this.root) {
             return;
         }
-        const toolbar = el("div", "s3u__toolbar");
+        const toolbar = el("div", "s3u__toolbar s3u__toolbar--sources");
         const title = el("div", "s3u__toolbar-title");
         title.append(el("div", "s3u__subtitle", this.t("settingsNote")));
-        const actions = el("div", "s3u__toolbar-actions");
+        // 文案单独一行，返回在最左、导入在最右，两者同一行
+        const bar = el("div", "s3u__toolbar-bar");
+        const lead = el("div", "s3u__toolbar-lead");
         const back = iconButton("iconBack", this.t("back"));
         back.addEventListener("click", () => {
             this.editing = undefined;
@@ -491,19 +578,26 @@ export class UsageDialog {
                 void this.refreshAll();
             }
         });
-        actions.append(back);
-        toolbar.append(title, actions);
+        lead.append(back);
+        const actions = el("div", "s3u__toolbar-actions");
+        // 思源导入是独立的配置项，只能在这里导入一次；导入后这条按钮不再出现
+        if (!this.siyuanSource()) {
+            const importButton = labeledIconButton("b3-button b3-button--outline", "iconDownload", this.t("importSync"));
+            importButton.addEventListener("click", () => void this.importSyncSource());
+            actions.append(importButton);
+        }
+        bar.append(lead, actions);
+        toolbar.append(title, bar);
         this.root.append(toolbar);
 
         const content = el("div", "s3u__settings");
+        const siyuan = this.siyuanSource();
+        if (siyuan) {
+            content.append(this.siyuanBlock(siyuan));
+        }
         const listHead = el("div", "s3u__settings-head");
         listHead.append(el("div", "s3u__settings-title", this.t("sourceTitle")));
         const listActions = el("div", "s3u__toolbar-actions");
-        if (readSyncS3Config()) {
-            const importButton = labeledIconButton("b3-button b3-button--outline", "iconDownload", this.t("importSync"));
-            importButton.addEventListener("click", () => void this.importSyncSource());
-            listActions.append(importButton);
-        }
         const add = iconButton("iconAdd", this.t("addSource"), "b3-button b3-button--text b3-button--icon");
         add.addEventListener("click", () => {
             this.adding = true;
@@ -516,7 +610,7 @@ export class UsageDialog {
 
         content.append(renderSourceList(
             this.t,
-            this.settings.sources,
+            this.settings.sources.filter((source) => !source.useSyncConfig),
             (source) => {
                 this.adding = false;
                 this.editing = source;
@@ -686,41 +780,24 @@ export class UsageDialog {
         });
     }
 
+    /** 导入只做一次：已存在就不再新增；之后只能改名或移除。 */
     private async importSyncSource(): Promise<void> {
-        const config = readSyncS3Config();
-        if (!config) {
+        if (this.siyuanSource()) {
+            return;
+        }
+        if (!readSyncS3Config()) {
             showMessage(this.t("importMissing"), 4000, "error");
             return;
         }
-        const existing = this.settings.sources.find((source) => source.useSyncConfig && source.buckets.includes(config.bucket));
-        if (existing) {
-            this.view = "sources";
-            this.editing = existing;
-            this.adding = false;
-            this.render();
-            return;
-        }
-        const source: DataSource = {
-            id: newSourceId(),
-            name: `SiYuan S3 · ${config.bucket}`,
-            provider: detectProvider(config.endpoint),
-            buckets: [config.bucket],
-            endpoint: config.endpoint,
-            region: config.region,
-            accountId: "",
-            useSyncConfig: true,
-            accessKey: "",
-            secretKey: "",
-            credentialsError: false,
-            credentialsErrorReason: "",
-        };
         try {
-            this.settings = await this.onSave({...this.settings, sources: [...this.settings.sources, source]});
+            this.settings = await this.onSave({
+                ...this.settings,
+                sources: [...this.settings.sources, siyuanRuntimeSource("")],
+            });
             showMessage(this.t("imported"), 2500, "info", "s3u-imported");
-            this.view = "usage";
-            this.results.clear();
+            this.adding = false;
+            this.editing = undefined;
             this.render();
-            void this.refreshAll();
         } catch (error) {
             showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
         }

@@ -27,7 +27,7 @@ View bucket usage of S3-compatible object storage inside SiYuan: storage size, o
 - Saved manual credentials can be cleared explicitly while keeping the data source configuration.
 - Multiple buckets per account, one card per bucket.
 - Credentials encrypted with the SiYuan **data repo key** before being written to the plugin directory; the ciphertext follows workspace sync, so another device with the same repo key can decrypt it.
-- Optional “Use the SiYuan S3 sync configuration” mode: credentials are read live from SiYuan settings and never stored by the plugin.
+- One S3 sync configuration can be imported from SiYuan as a standalone data source: the plugin stores only the name you give it, while provider, bucket, region and credentials are read live from the SiYuan settings on every query. Importing is allowed once; afterwards the entry can only be renamed or removed.
 - Bilingual UI (English / Simplified Chinese), desktop and mobile.
 
 ## Requirements
@@ -49,13 +49,13 @@ View bucket usage of S3-compatible object storage inside SiYuan: storage size, o
    - Alibaba Cloud OSS traffic and requests go through CloudMonitor, so the key needs `cms:QueryMetricList` (`AliyunCloudMonitorReadOnlyAccess` is enough).
    - MinIO traffic and requests come from the Prometheus metrics endpoint and need `admin:Prometheus` (or a public metrics endpoint).
 4. Save. The first query starts immediately.
-5. To reuse the S3 configuration already saved in SiYuan, click the download icon (**Import SiYuan S3 sync configuration**) or tick **Use the SiYuan S3 sync configuration** in the editor.
+5. To reuse the S3 configuration already saved in SiYuan, click the download icon (**Import SiYuan S3 sync configuration**) at the top right of the **Data sources** page. The button disappears after importing: the entry always follows the current SiYuan sync configuration and can only be renamed or removed (then re-imported).
 
 ### Credential encryption
 
 Manual credentials are encrypted with AES-256-GCM. The encryption key is derived with HKDF-SHA256 from the SiYuan data repo key (`window.siyuan.config.repo.key`). Only the ciphertext is stored in `data/storage/petal/s3-usage-siyuan/`; the plaintext exists in memory only.
 
-- If no data repo key has been initialized, manual credentials cannot be saved. Initialize or import one in **Settings → Data repo key**, or use the SiYuan S3 sync configuration.
+- If no data repo key has been initialized, manual credentials cannot be saved. Initialize or import one in **Settings → Data repo key**, or use the data source imported from the SiYuan S3 sync configuration.
 - If the repo key is reset or replaced, old ciphertext cannot be decrypted. Re-enter the credentials; the plugin will not silently fall back to plaintext.
 - On an insecure origin (for example `http://192.168.x.x:6806`), WebCrypto is unavailable, so manual credentials cannot be saved or decrypted there. Use the desktop client or `http://127.0.0.1:6806`.
 

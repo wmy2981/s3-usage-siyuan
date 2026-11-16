@@ -6,6 +6,9 @@
  */
 export const STORAGE_NAME = "s3-usage-config";
 
+/** 从思源导入那一条数据源的固定 id：全局只有一条。 */
+export const SIYUAN_SOURCE_ID = "siyuan-import";
+
 export const PROVIDER_IDS = [
     "aliyunOss",
     "tencentCos",
@@ -27,8 +30,6 @@ export interface StoredSource {
     endpoint: string;
     region: string;
     accountId: string;
-    /** 读取思源「设置 → 同步 → S3」里的凭据，而不是用插件自己保存的凭据。 */
-    useSyncConfig: boolean;
     /** AES-GCM 信封；没有手动凭据时为空。 */
     credentials?: string;
 }
@@ -36,10 +37,23 @@ export interface StoredSource {
 export interface DataSource extends StoredSource {
     accessKey: string;
     secretKey: string;
+    /**
+     * 「从思源导入」那一条数据的标记，只由插件内部置位，用户不能选择。
+     *
+     * 置位后除名字外的所有字段都是运行时从思源「设置 → 同步 → S3」现读的，
+     * 落盘只留名字（见 `StoredSettings.siyuan`）。
+     */
+    useSyncConfig: boolean;
     /** 密文存在但解不开（仓库密钥被更换，或当前环境没有 WebCrypto）。 */
     credentialsError: boolean;
     /** 解不开的具体原因，界面据此给不同提示。 */
     credentialsErrorReason: "unreadable" | "unavailable" | "";
+}
+
+/** 从思源导入的唯一一条数据源：落盘只有用户改过的名字，其余全在运行时读。 */
+export interface StoredSiyuanImport {
+    /** 显示名；空串表示用默认名。 */
+    name: string;
 }
 
 export interface StoredSettings {
@@ -47,7 +61,10 @@ export interface StoredSettings {
     timeoutSeconds: number;
     /** 自动刷新间隔（分钟）；0 表示只在手动点击时刷新。 */
     refreshMinutes: number;
+    /** 只包含手动填写的数据源。 */
     sources: StoredSource[];
+    /** 存在即表示已经导入过思源配置，且最多只能有一条。 */
+    siyuan?: StoredSiyuanImport;
 }
 
 export interface PluginSettings {
@@ -130,6 +147,50 @@ export function repoKeyBase64(): string {
     return text(siyuanConfig()?.repo?.key);
 }
 
+/**
+ * 用思源当前的 S3 同步配置构建「从思源导入」的运行时数据源。
+ *
+ * 服务商、桶名、地域、凭据每次调用都重新读；思源侧改了同步配置就自动跟着变，
+ * 没有可用配置时返回一条空壳，界面据此显示「思源当前没有可用的 S3 同步配置」。
+ */
+export function siyuanRuntimeSource(name: string): DataSource {
+    const base: DataSource = {
+        id: SIYUAN_SOURCE_ID,
+        name,
+        provider: "minio",
+        buckets: [],
+        endpoint: "",
+        region: "",
+        accountId: "",
+        useSyncConfig: true,
+        accessKey: "",
+        secretKey: "",
+        credentialsError: false,
+        credentialsErrorReason: "",
+    };
+    const config = readSyncS3Config();
+    if (!config) {
+        return base;
+    }
+    // 思源里存的是不带协议头的 host，查询前统一补全
+    const endpoint = normalizeEndpoint(config.endpoint);
+    const provider = detectProvider(endpoint);
+    return {
+        ...base,
+        provider,
+        buckets: [config.bucket],
+        endpoint,
+        region: config.region || regionFromEndpoint(endpoint, provider),
+        accessKey: config.accessKey,
+        secretKey: config.secretKey,
+    };
+}
+
+/** 手动数据源原样返回；思源导入那一条按当前同步配置重建。 */
+export function resolveSource(source: DataSource): DataSource {
+    return source.useSyncConfig ? siyuanRuntimeSource(source.name) : source;
+}
+
 /** 字符串字段的归一化：非字符串按空串处理，去首尾空白。 */
 export function text(value: unknown): string {
     return typeof value === "string" ? value.trim() : "";
@@ -194,9 +255,30 @@ function normalizeStoredSource(value: unknown, index: number): StoredSource | un
         endpoint: normalizeEndpoint(source.endpoint),
         region: text(source.region),
         accountId: text(source.accountId),
-        useSyncConfig: source.useSyncConfig === true,
         credentials: text(source.credentials) || undefined,
     };
+}
+
+/** 旧版本把思源导入混在数据源列表里，这类条目升级时统一迁到独立的 siyuan 字段。 */
+function isLegacySiyuanSource(value: unknown): boolean {
+    return !!value && typeof value === "object" && (value as Record<string, unknown>).useSyncConfig === true;
+}
+
+/** 旧配置里可能有多条，迁移只认第一条。 */
+function legacySiyuanName(rawSources: unknown): string | undefined {
+    if (!Array.isArray(rawSources)) {
+        return undefined;
+    }
+    const legacy = rawSources.find(isLegacySiyuanSource);
+    return legacy === undefined ? undefined : text((legacy as Record<string, unknown>).name);
+}
+
+function mergeSiyuanImport(rawSiyuan: unknown, rawSources: unknown): StoredSiyuanImport | undefined {
+    if (rawSiyuan && typeof rawSiyuan === "object") {
+        return {name: text((rawSiyuan as Record<string, unknown>).name)};
+    }
+    const legacy = legacySiyuanName(rawSources);
+    return legacy === undefined ? undefined : {name: legacy};
 }
 
 /**
@@ -211,6 +293,10 @@ export function mergeStoredSettings(raw: unknown): StoredSettings {
     const sources: StoredSource[] = [];
     if (Array.isArray(value.sources)) {
         value.sources.forEach((item, index) => {
+            // 旧配置里的思源导入条目升级到 siyuan 字段，不再当作普通数据源
+            if (isLegacySiyuanSource(item)) {
+                return;
+            }
             const source = normalizeStoredSource(item, index);
             if (source && !seen.has(source.id)) {
                 seen.add(source.id);
@@ -220,12 +306,14 @@ export function mergeStoredSettings(raw: unknown): StoredSettings {
     }
     const timeout = Math.round(numberIn(value.timeoutSeconds, DEFAULT_TIMEOUT_SECONDS));
     const refresh = Math.round(numberIn(value.refreshMinutes, 0));
+    const siyuan = mergeSiyuanImport(value.siyuan, value.sources);
     return {
         version: 1,
         timeoutSeconds: Math.min(MAX_TIMEOUT_SECONDS, Math.max(MIN_TIMEOUT_SECONDS, timeout)),
         // 旧配置没有这个字段；非法档位一律回到「不自动刷新」
         refreshMinutes: (REFRESH_MINUTES_OPTIONS as readonly number[]).includes(refresh) ? refresh : 0,
         sources,
+        ...(siyuan ? {siyuan} : {}),
     };
 }
 
