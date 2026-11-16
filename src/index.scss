@@ -21,6 +21,8 @@
 }
 
 .s3u {
+    /* 界面上的错误文案统一用这一支红，取思源主题的报错色 */
+    --s3u-error: var(--b3-theme-error);
     color: var(--b3-theme-on-background);
     font-family: var(--b3-font-family);
     font-size: 14px;
@@ -205,8 +207,8 @@
 }
 
 .s3u__badge--error {
-    color: var(--b3-theme-error);
-    background: color-mix(in srgb, var(--b3-theme-error) 12%, transparent);
+    color: var(--s3u-error);
+    background: color-mix(in srgb, var(--s3u-error) 12%, transparent);
 }
 
 /* ---------- 卡片 ---------- */
@@ -372,6 +374,12 @@
     content: "· ";
 }
 
+/* 失败原因：和普通说明同一版式，但用统一红并取消减淡 */
+.s3u__notes--error {
+    color: var(--s3u-error);
+    opacity: 1;
+}
+
 /* ---------- 加载 / 错误 / 空状态 ---------- */
 
 .s3u__skeleton {
@@ -405,17 +413,17 @@
     gap: 6px;
     padding: 8px;
     border-radius: 8px;
-    background: color-mix(in srgb, var(--b3-theme-error) 7%, transparent);
+    background: color-mix(in srgb, var(--s3u-error) 7%, transparent);
 }
 
 .s3u__error-title {
-    color: var(--b3-theme-error);
+    color: var(--s3u-error);
     font-size: 13px;
     font-weight: 600;
 }
 
 .s3u__error-text {
-    color: var(--b3-theme-on-surface);
+    color: var(--s3u-error);
     font-size: 12px;
     word-break: break-word;
     -webkit-user-select: text;
@@ -455,6 +463,11 @@
     color: var(--b3-theme-on-surface);
     font-size: 12px;
     opacity: 0.75;
+}
+
+.s3u__empty-inline--error {
+    color: var(--s3u-error);
+    opacity: 1;
 }
 
 /* ---------- 数据源管理 ---------- */
@@ -521,7 +534,51 @@
 }
 
 .s3u__siyuan-line--error {
-    color: var(--b3-theme-error);
+    color: var(--s3u-error);
+}
+
+/* 设置页「测试连接」的逐源结果 */
+.s3u__test-results {
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 10px;
+    background: var(--b3-theme-surface);
+}
+
+.s3u__test-summary {
+    color: var(--b3-theme-on-surface);
+    font-size: 11px;
+    opacity: 0.75;
+}
+
+.s3u__test-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 5px 0;
+    font-size: 12px;
+}
+
+.s3u__test-name {
+    min-width: 0;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.s3u__test-message {
+    flex: 0 1 auto;
+    min-width: 0;
+    color: var(--b3-theme-on-surface);
+    text-align: right;
+    word-break: break-word;
+}
+
+.s3u__test-message--error {
+    color: var(--s3u-error);
 }
 
 .s3u__source-list {
@@ -635,7 +692,7 @@
 }
 
 .s3u__status[data-kind="error"] {
-    color: var(--b3-theme-error);
+    color: var(--s3u-error);
 }
 
 .s3u__status[data-kind="success"] {

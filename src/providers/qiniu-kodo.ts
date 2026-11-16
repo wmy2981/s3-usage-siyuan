@@ -237,9 +237,10 @@ export const qiniuKodo: ProviderDefinition = {
     async query(ctx) {
         const endpoint = endpointFor(ctx.source);
         const notes = ["noteQiniuDelay"];
+        const errors: string[] = [];
         const [values, metrics] = await Promise.all([
             mapLimit(SPECS, 4, (spec) => queryStat(ctx, spec, endpoint)),
-            withMetrics(() => queryTraffic(ctx, endpoint), notes),
+            withMetrics(() => queryTraffic(ctx, endpoint), errors),
         ]);
         const classes = new Map<string, StorageClassUsage>();
         let storageBytes = 0;
@@ -281,6 +282,7 @@ export const qiniuKodo: ProviderDefinition = {
             ),
             dataTime: dataTime > 0 ? dataTime : undefined,
             notes,
+            errors,
         };
     },
 };

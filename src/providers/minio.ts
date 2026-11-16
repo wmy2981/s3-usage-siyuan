@@ -211,11 +211,12 @@ export const minio: ProviderDefinition = {
         }
         const usage = parseMinioUsage(response.body, ctx.bucket);
         const notes = ["noteMinioRealtime"];
-        const metrics = await withMetrics(async () => parseMinioMetrics(await fetchMetrics(ctx), ctx.bucket), notes);
+        const errors: string[] = [];
+        const metrics = await withMetrics(async () => parseMinioMetrics(await fetchMetrics(ctx), ctx.bucket), errors);
         if (metrics.trafficInBytes !== undefined || metrics.trafficOutBytes !== undefined || metrics.requestCount !== undefined) {
             notes.push("noteMinioCumulative");
         }
-        return {...usage, ...metrics, notes};
+        return {...usage, ...metrics, notes, errors};
     },
 };
 

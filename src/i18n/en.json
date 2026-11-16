@@ -19,6 +19,8 @@
   "siyuanImportRemove": "Remove the SiYuan import",
   "siyuanImportRemoveConfirm": "Remove “{name}”? You can import it again afterwards.",
   "siyuanImportRemoved": "Removed the SiYuan import",
+  "testResultsTitle": "Test results",
+  "testSummary": "{total} source(s), {failed} failed",
   "loading": "Querying…",
   "noBuckets": "This data source has no bucket yet.",
   "lastUpdated": "Updated {time}",

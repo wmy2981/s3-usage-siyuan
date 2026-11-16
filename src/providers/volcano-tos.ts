@@ -221,11 +221,12 @@ export const volcanoTos: ProviderDefinition = {
         }
         const usage = parseTosStat(response.body);
         const notes = ["noteTosDelay"];
-        const metrics = await withMetrics(() => queryTraffic(ctx), notes);
+        const errors: string[] = [];
+        const metrics = await withMetrics(() => queryTraffic(ctx), errors);
         if (metrics.trafficInBytes !== undefined || metrics.trafficOutBytes !== undefined || metrics.requestCount !== undefined) {
             notes.push("noteMetricsWindow", "noteVolcDerived");
         }
-        return {...usage, ...metrics, notes};
+        return {...usage, ...metrics, notes, errors};
     },
 };
 

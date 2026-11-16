@@ -136,11 +136,12 @@ export const huaweiObs: ProviderDefinition = {
         }
         const usage = parseStorageInfo(response.body);
         const notes = ["noteObsDelay"];
+        const errors: string[] = [];
         const projectId = source.accountId.trim();
         const region = source.region.trim() || regionFromEndpoint(endpoint, "huaweiObs");
         if (projectId === "" || region === "") {
             notes.push("noteObsProjectId");
-            return {...usage, notes};
+            return {...usage, notes, errors};
         }
         const metrics = await withMetrics(async () => {
             const [outgoing, incoming, rates] = await Promise.all([
@@ -157,14 +158,14 @@ export const huaweiObs: ProviderDefinition = {
                 trafficInBytes: sumDefined(incoming),
                 requestCount,
             };
-        }, notes);
+        }, errors);
         if (metrics.trafficInBytes !== undefined || metrics.trafficOutBytes !== undefined || metrics.requestCount !== undefined) {
             notes.push("noteMetricsWindow");
         }
         if (metrics.requestCount !== undefined) {
             notes.push("noteObsRate");
         }
-        return {...usage, ...metrics, notes};
+        return {...usage, ...metrics, notes, errors};
     },
 };
 

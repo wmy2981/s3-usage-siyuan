@@ -281,6 +281,7 @@ export const awsS3: ProviderDefinition = {
         dataTime = Math.max(dataTime, objects.timestamp ?? 0);
 
         const notes = ["noteAwsDaily", "noteAwsScope"];
+        const errors: string[] = [];
         const metrics = await withMetrics(async () => {
             const filters = await listRequestMetricFilters(ctx, ctx.bucket);
             if (filters.length === 0) {
@@ -294,7 +295,7 @@ export const awsS3: ProviderDefinition = {
                 sumRequestMetric(ctx, ctx.bucket, filters, "BytesDownloaded", "Bytes"),
             ]);
             return {requestCount, trafficInBytes, trafficOutBytes};
-        }, notes);
+        }, errors);
 
         return {
             storageBytes: hasStorage ? storageBytes : undefined,
@@ -302,6 +303,7 @@ export const awsS3: ProviderDefinition = {
             storageClasses: classes,
             dataTime: dataTime > 0 ? dataTime : undefined,
             notes,
+            errors,
             ...metrics,
         };
     },

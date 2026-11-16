@@ -19,6 +19,8 @@
   "siyuanImportRemove": "移除思源导入",
   "siyuanImportRemoveConfirm": "确定移除「{name}」？移除后可以重新导入。",
   "siyuanImportRemoved": "已移除思源导入",
+  "testResultsTitle": "测试结果",
+  "testSummary": "共 {total} 个源，{failed} 个失败",
   "loading": "正在查询…",
   "noBuckets": "这个数据源还没有填写存储桶。",
   "lastUpdated": "更新于 {time}",

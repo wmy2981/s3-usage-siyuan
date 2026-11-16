@@ -50,8 +50,10 @@ export interface BucketUsage {
     storageClasses?: StorageClassUsage[];
     /** 服务商统计时间（毫秒）；接口没给时为 undefined。 */
     dataTime?: number;
-    /** 界面上的附加说明，例如「数据延迟约 2 小时」。 */
+    /** 界面上的附加说明，例如「数据延迟约 2 小时」；成功时也可能有，保持灰色。 */
     notes?: string[];
+    /** 真正失败的提示，例如监控接口报错；界面统一标红。 */
+    errors?: string[];
 }
 
 export interface ProviderDefinition {

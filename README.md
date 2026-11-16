@@ -26,6 +26,8 @@ View bucket usage of S3-compatible object storage inside SiYuan: storage size, o
 - The data source page exposes the query timeout and auto-refresh interval.
 - Saved manual credentials can be cleared explicitly while keeping the data source configuration.
 - Multiple buckets per account, one card per bucket.
+- Every error message in the UI (including provider query failures) is shown in one unified red; ordinary notes such as “data delayed” stay grey.
+- The **Test connection** button at the top right of the data sources page queries the first bucket of every data source and lists the outcome, with failures in red.
 - Credentials encrypted with the SiYuan **data repo key** before being written to the plugin directory; the ciphertext follows workspace sync, so another device with the same repo key can decrypt it.
 - One S3 sync configuration can be imported from SiYuan as a standalone data source: the plugin stores only the name you give it, while provider, bucket, region and credentials are read live from the SiYuan settings on every query. Importing is allowed once; afterwards the entry can only be renamed or removed.
 - Bilingual UI (English / Simplified Chinese), desktop and mobile.
@@ -48,7 +50,7 @@ View bucket usage of S3-compatible object storage inside SiYuan: storage size, o
    - Volcano Engine TOS needs CloudMonitor read access; AWS S3 needs CloudWatch request metrics enabled on the bucket.
    - Alibaba Cloud OSS traffic and requests go through CloudMonitor, so the key needs `cms:QueryMetricList` (`AliyunCloudMonitorReadOnlyAccess` is enough).
    - MinIO traffic and requests come from the Prometheus metrics endpoint and need `admin:Prometheus` (or a public metrics endpoint).
-4. Save. The first query starts immediately.
+4. Save. The first query starts immediately. **Test connection** at the top right of the data sources page queries one bucket per data source and lists the results without opening the dashboard.
 5. To reuse the S3 configuration already saved in SiYuan, click the download icon (**Import SiYuan S3 sync configuration**) at the top right of the **Data sources** page. The button disappears after importing: the entry always follows the current SiYuan sync configuration and can only be renamed or removed (then re-imported).
 
 ### Credential encryption

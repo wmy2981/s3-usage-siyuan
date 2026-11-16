@@ -73,7 +73,7 @@ siyuan serve --workspace "<临时工作空间>" --home-dir "<临时用户目录>
 - 只查询用量，不接账单/费用接口。
 - 不自动列举桶；桶名手动填写。
 - 服务商数据均有延迟，不能当计费口径。
-- 流量/请求数除 MinIO 外统一取最近 24 小时；监控接口失败时保留存储量与对象数，原因写进 notes。
+- 流量/请求数除 MinIO 外统一取最近 24 小时；监控接口失败时保留存储量与对象数，原因写进 `errors`（界面标红），「数据延迟」这类说明留在 `notes`（灰色）。
 - MinIO 需要 admin 级凭据（`admin:DataUsageInfo` 与 `admin:Prometheus`），且指标是自启动累计值。
 - 华为云 OBS 需要项目 ID（填在 Account ID）才会查询流量/请求数；AWS S3 需要先为桶启用 CloudWatch 请求指标。
 - Cloudflare R2 的 Analytics 不是计费口径，且不统计小于 100 KiB 的传输。

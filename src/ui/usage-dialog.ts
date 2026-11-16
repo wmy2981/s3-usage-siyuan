@@ -33,6 +33,13 @@ const DIALOG_CLASS = "s3u-dialog";
 /** 自动刷新按 30 秒检查一次，刷新误差不超过半分钟。 */
 const TICK_MS = 30_000;
 
+/** 「测试连接」的逐源结果；只用于设置页展示，不落盘。 */
+interface SourceTestResult {
+    name: string;
+    ok: boolean;
+    message: string;
+}
+
 interface BucketResult {
     state: "loading" | "ok" | "error";
     usage?: BucketUsage;
@@ -62,6 +69,8 @@ export class UsageDialog {
     private editing?: DataSource;
     private adding = false;
     private querying = false;
+    private testing = false;
+    private testResults?: SourceTestResult[];
 
     constructor(options: UsageDialogOptions) {
         this.t = options.t;
@@ -254,7 +263,7 @@ export class UsageDialog {
         section.append(head);
 
         if (source.buckets.length === 0) {
-            section.append(el("div", "s3u__empty-inline",
+            section.append(el("div", source.useSyncConfig ? "s3u__empty-inline s3u__empty-inline--error" : "s3u__empty-inline",
                 this.t(source.useSyncConfig ? "importMissing" : "noBuckets")));
             return section;
         }
@@ -445,14 +454,21 @@ export class UsageDialog {
         if (usage.dataTime) {
             box.append(el("div", "s3u__meta", this.t("dataTime", {time: formatTimestamp(usage.dataTime)})));
         }
+        if (usage.errors && usage.errors.length > 0) {
+            box.append(this.noteList("s3u__notes s3u__notes--error", usage.errors));
+        }
         if (usage.notes && usage.notes.length > 0) {
-            const notes = el("div", "s3u__notes");
-            for (const note of usage.notes) {
-                notes.append(el("div", "s3u__note", this.t(note)));
-            }
-            box.append(notes);
+            box.append(this.noteList("s3u__notes", usage.notes));
         }
         return box;
+    }
+
+    private noteList(className: string, messages: string[]): HTMLElement {
+        const list = el("div", className);
+        for (const message of messages) {
+            list.append(el("div", "s3u__note", this.t(message)));
+        }
+        return list;
     }
 
     private metric(label: string, value: string, supported: boolean): HTMLElement {
@@ -534,6 +550,7 @@ export class UsageDialog {
             source.useSyncConfig ? {...source, name: name.trim()} : source);
         try {
             this.settings = await this.onSave({...this.settings, sources});
+            this.dropResults();
             showMessage(this.t("settingsSaved"), 2000, "info");
             this.render();
         } catch (error) {
@@ -548,7 +565,7 @@ export class UsageDialog {
                 try {
                     const sources = this.settings.sources.filter((item) => !item.useSyncConfig);
                     this.settings = await this.onSave({...this.settings, sources});
-                    this.results.clear();
+                    this.dropResults();
                     this.render();
                     showMessage(this.t("siyuanImportRemoved"), 2500, "info");
                 } catch (error) {
@@ -586,11 +603,21 @@ export class UsageDialog {
             importButton.addEventListener("click", () => void this.importSyncSource());
             actions.append(importButton);
         }
+        // 测试连接：导入按钮右侧，始终显示；逐个源查第一个桶
+        const test = labeledIconButton("b3-button b3-button--outline", "iconLink",
+            this.t(this.testing ? "sourceTesting" : "sourceTest"));
+        test.disabled = this.testing || this.settings.sources.length === 0;
+        test.addEventListener("click", () => void this.testAllSources());
+        actions.append(test);
         bar.append(lead, actions);
         toolbar.append(title, bar);
         this.root.append(toolbar);
 
         const content = el("div", "s3u__settings");
+        const testResults = this.testResultsBlock();
+        if (testResults) {
+            content.append(testResults);
+        }
         const siyuan = this.siyuanSource();
         if (siyuan) {
             content.append(this.siyuanBlock(siyuan));
@@ -726,11 +753,17 @@ export class UsageDialog {
         }
         this.adding = false;
         this.editing = undefined;
-        this.results.clear();
+        this.dropResults();
         this.view = "usage";
         showMessage(this.t("sourceSaved"), 2500, "info", "s3u-saved");
         this.render();
         void this.refreshAll();
+    }
+
+    /** 数据源变了，卡片结果与测试结果都作废。 */
+    private dropResults(): void {
+        this.results.clear();
+        this.testResults = undefined;
     }
 
     /** 清掉已持久化的凭据，但保留数据源本身；用户需要重新填写才能继续查询。 */
@@ -753,7 +786,7 @@ export class UsageDialog {
                         }
                         : item);
                     this.settings = await this.onSave({...this.settings, sources});
-                    this.results.clear();
+                    this.dropResults();
                     this.adding = false;
                     this.editing = undefined;
                     this.render();
@@ -771,7 +804,7 @@ export class UsageDialog {
                 try {
                     const sources = this.settings.sources.filter((item) => item.id !== source.id);
                     this.settings = await this.onSave({...this.settings, sources});
-                    this.results.clear();
+                    this.dropResults();
                     this.render();
                 } catch (error) {
                     showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
@@ -794,12 +827,83 @@ export class UsageDialog {
                 ...this.settings,
                 sources: [...this.settings.sources, siyuanRuntimeSource("")],
             });
+            this.dropResults();
             showMessage(this.t("imported"), 2500, "info", "s3u-imported");
             this.adding = false;
             this.editing = undefined;
             this.render();
         } catch (error) {
             showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
+        }
+    }
+
+    private testResultsBlock(): HTMLElement | undefined {
+        if (!this.testResults) {
+            return undefined;
+        }
+        const box = el("div", "s3u__test-results");
+        box.setAttribute("role", "status");
+        box.setAttribute("aria-live", "polite");
+        const head = el("div", "s3u__settings-head");
+        head.append(el("div", "s3u__settings-title", this.t("testResultsTitle")));
+        const failed = this.testResults.filter((item) => !item.ok).length;
+        head.append(el("div", "s3u__test-summary",
+            this.t("testSummary", {total: this.testResults.length, failed})));
+        box.append(head);
+        for (const item of this.testResults) {
+            const row = el("div", "s3u__test-row");
+            row.append(
+                el("div", "s3u__test-name", item.name),
+                el("div", item.ok ? "s3u__test-message" : "s3u__test-message s3u__test-message--error", item.message),
+            );
+            box.append(row);
+        }
+        return box;
+    }
+
+    /** 测试全部源（含思源导入），每个源只查第一个桶。 */
+    private async testAllSources(): Promise<void> {
+        if (this.testing || this.settings.sources.length === 0) {
+            return;
+        }
+        this.testing = true;
+        this.testResults = undefined;
+        this.render();
+        const results: SourceTestResult[] = [];
+        for (const source of this.settings.sources) {
+            results.push(await this.testOneSource(source));
+        }
+        this.testResults = results;
+        this.testing = false;
+        this.render();
+    }
+
+    private async testOneSource(source: DataSource): Promise<SourceTestResult> {
+        const bucket = source.buckets[0] ?? "";
+        const label = this.sourceLabel(source);
+        if (bucket === "") {
+            return {
+                name: label,
+                ok: false,
+                message: this.t(source.useSyncConfig ? "importMissing" : "sourceBucketsRequired"),
+            };
+        }
+        try {
+            const usage = await queryBucket(source, bucket, this.settings.timeoutSeconds);
+            return {
+                name: `${label} · ${bucket}`,
+                ok: true,
+                message: this.t("sourceTestSuccess", {storage: formatBytes(usage.storageBytes)}),
+            };
+        } catch (error) {
+            const normalized = error instanceof QueryError
+                ? {kind: error.kind, message: error.message}
+                : {kind: "provider" as const, message: errorText(error)};
+            return {
+                name: `${label} · ${bucket}`,
+                ok: false,
+                message: this.t("sourceTestFailed", {message: this.errorMessage(source, normalized)}),
+            };
         }
     }
 

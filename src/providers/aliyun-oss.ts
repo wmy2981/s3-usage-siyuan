@@ -182,6 +182,7 @@ export const aliyunOss: ProviderDefinition = {
         }
         const usage = parseStat(response.body);
         const notes = ["noteOssDelay"];
+        const errors: string[] = [];
         const metrics = await withMetrics(async () => {
             const [outgoing, incoming, requests] = await Promise.all([
                 cmsMetric(ctx, region, "InternetSend"),
@@ -189,11 +190,11 @@ export const aliyunOss: ProviderDefinition = {
                 cmsMetric(ctx, region, "TotalRequestCount"),
             ]);
             return {trafficOutBytes: outgoing, trafficInBytes: incoming, requestCount: requests};
-        }, notes);
+        }, errors);
         if (metrics.trafficInBytes !== undefined || metrics.trafficOutBytes !== undefined || metrics.requestCount !== undefined) {
             notes.push("noteMetricsWindow");
         }
-        return {...usage, ...metrics, notes};
+        return {...usage, ...metrics, notes, errors};
     },
 };
 

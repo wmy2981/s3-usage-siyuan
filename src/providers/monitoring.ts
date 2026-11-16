@@ -9,20 +9,21 @@ export type MetricsPart = Pick<BucketUsage, "trafficInBytes" | "trafficOutBytes"
 /**
  * 监控接口与用量接口往往不是同一套权限。
  *
- * 监控查询失败时不把整张卡片变成错误，而是保留存储量与对象数，把原因记进 notes：
+ * 监控查询失败时不把整张卡片变成错误，而是保留存储量与对象数，把原因记进 errors：
  * 缺监控权限、没开通计费、指标名变更都属于这类「能看容量、看不到流量」的场景。
+ * 失败原因单独走 errors 通道，界面据此标红；普通的「数据延迟」说明仍留在 notes。
  */
 export async function withMetrics(
     run: () => Promise<MetricsPart>,
-    notes: string[],
+    errors: string[],
 ): Promise<MetricsPart> {
     try {
         return await run();
     } catch (error) {
-        notes.push("noteMetricsFailed");
+        errors.push("noteMetricsFailed");
         const message = error instanceof Error ? error.message : String(error);
         if (message !== "") {
-            notes.push(message.slice(0, 200));
+            errors.push(message.slice(0, 200));
         }
         return {};
     }
