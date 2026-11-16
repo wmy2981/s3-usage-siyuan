@@ -7,8 +7,11 @@
 import {confirm, Dialog, showMessage} from "siyuan";
 import type {DataSource, PluginSettings} from "../config";
 import {
+    DEFAULT_TEST_TIMEOUT_SECONDS,
     DEFAULT_TIMEOUT_SECONDS,
+    MAX_TEST_TIMEOUT_SECONDS,
     MAX_TIMEOUT_SECONDS,
+    MIN_TEST_TIMEOUT_SECONDS,
     MIN_TIMEOUT_SECONDS,
     REFRESH_MINUTES_OPTIONS,
     readSyncS3Config,
@@ -689,6 +692,23 @@ export class UsageDialog {
         });
         box.append(fieldRow(this.t("queryTimeout"), timeout, this.t("queryTimeoutHint")));
 
+        const testTimeout = el("input", "b3-text-field s3u__number");
+        testTimeout.type = "number";
+        testTimeout.min = String(MIN_TEST_TIMEOUT_SECONDS);
+        testTimeout.max = String(MAX_TEST_TIMEOUT_SECONDS);
+        testTimeout.step = "1";
+        testTimeout.value = String(this.settings.testTimeoutSeconds);
+        testTimeout.addEventListener("change", () => {
+            const parsed = Number(testTimeout.value);
+            const next = Math.min(
+                MAX_TEST_TIMEOUT_SECONDS,
+                Math.max(MIN_TEST_TIMEOUT_SECONDS, Math.round(Number.isFinite(parsed) ? parsed : DEFAULT_TEST_TIMEOUT_SECONDS)),
+            );
+            testTimeout.value = String(next);
+            void this.saveTestTimeout(next);
+        });
+        box.append(fieldRow(this.t("checkTimeout"), testTimeout, this.t("checkTimeoutHint")));
+
         const refresh = el("select", "b3-select");
         for (const minutes of REFRESH_MINUTES_OPTIONS) {
             const option = el("option", "", minutes === 0
@@ -712,6 +732,19 @@ export class UsageDialog {
             showMessage(this.t("settingsSaved"), 2000, "info");
         } catch (error) {
             showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
+            this.render();
+        }
+    }
+
+    private async saveTestTimeout(testTimeoutSeconds: number): Promise<void> {
+        if (testTimeoutSeconds === this.settings.testTimeoutSeconds) {
+            return;
+        }
+        try {
+            this.settings = await this.onSave({...this.settings, testTimeoutSeconds});
+            showMessage(this.t("settingsSaved"), 2000, "info");
+        } catch (error) {
+            showMessage(this.t("sourceTestFailed", {message: errorText(error)}), 5000, "error");
             this.render();
         }
     }
@@ -878,42 +911,62 @@ export class UsageDialog {
         this.render();
     }
 
+    /** 连接检查：一个源的所有桶都查一次，按源汇总。 */
     private async testOneSource(source: DataSource): Promise<SourceTestResult> {
-        const bucket = source.buckets[0] ?? "";
         const label = this.sourceLabel(source);
-        if (bucket === "") {
+        if (source.buckets.length === 0) {
             return {
                 name: label,
                 ok: false,
                 message: this.t(source.useSyncConfig ? "importMissing" : "sourceBucketsRequired"),
             };
         }
-        try {
-            const usage = await queryBucket(source, bucket, this.settings.timeoutSeconds);
+        const failures: string[] = [];
+        let storage = 0;
+        let hasStorage = false;
+        for (const bucket of source.buckets) {
+            try {
+                const usage = await queryBucket(source, bucket, this.settings.testTimeoutSeconds);
+                if (usage.storageBytes !== undefined) {
+                    storage += usage.storageBytes;
+                    hasStorage = true;
+                }
+            } catch (error) {
+                failures.push(this.t("testBucketDetail", {
+                    bucket,
+                    message: this.errorMessage(source, error instanceof QueryError
+                        ? {kind: error.kind, message: error.message}
+                        : {kind: "provider", message: errorText(error)}),
+                }));
+            }
+        }
+        if (failures.length === 0) {
             return {
-                name: `${label} · ${bucket}`,
+                name: label,
                 ok: true,
-                message: this.t("sourceTestSuccess", {storage: formatBytes(usage.storageBytes)}),
-            };
-        } catch (error) {
-            const normalized = error instanceof QueryError
-                ? {kind: error.kind, message: error.message}
-                : {kind: "provider" as const, message: errorText(error)};
-            return {
-                name: `${label} · ${bucket}`,
-                ok: false,
-                message: this.t("sourceTestFailed", {message: this.errorMessage(source, normalized)}),
+                message: this.t("testAllOk", {
+                    count: source.buckets.length,
+                    storage: formatBytes(hasStorage ? storage : undefined),
+                }),
             };
         }
+        return {
+            name: label,
+            ok: false,
+            message: this.t("testFailedSummary", {
+                failed: failures.length,
+                total: source.buckets.length,
+                details: failures.join("；"),
+            }),
+        };
     }
 
     private async testSource(source: DataSource): Promise<string> {
-        const bucket = source.buckets[0] ?? "";
-        if (bucket === "") {
-            throw new Error(this.t("sourceBucketsRequired"));
+        const result = await this.testOneSource(source);
+        if (!result.ok) {
+            throw new Error(result.message);
         }
-        const usage = await queryBucket(source, bucket, this.settings.timeoutSeconds);
-        return this.t("sourceTestSuccess", {storage: formatBytes(usage.storageBytes)});
+        return result.message;
     }
 
     private async queryOne(source: DataSource, bucket: string): Promise<void> {

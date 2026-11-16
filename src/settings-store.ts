@@ -64,6 +64,7 @@ export async function loadSettings(plugin: Plugin): Promise<PluginSettings> {
     return {
         version: 1,
         timeoutSeconds: stored.timeoutSeconds,
+        testTimeoutSeconds: stored.testTimeoutSeconds,
         refreshMinutes: stored.refreshMinutes,
         sources,
     };
@@ -85,6 +86,7 @@ function sameSource(a: StoredSource, b: StoredSource): boolean {
 function sameStoredSettings(a: StoredSettings, b: StoredSettings): boolean {
     return a.version === b.version
         && a.timeoutSeconds === b.timeoutSeconds
+        && a.testTimeoutSeconds === b.testTimeoutSeconds
         && a.refreshMinutes === b.refreshMinutes
         && a.siyuan?.name === b.siyuan?.name
         && a.sources.length === b.sources.length
@@ -139,6 +141,7 @@ export async function saveSettings(plugin: Plugin, settings: PluginSettings): Pr
     const stored: StoredSettings = {
         version: 1,
         timeoutSeconds: next.timeoutSeconds,
+        testTimeoutSeconds: next.testTimeoutSeconds,
         refreshMinutes: next.refreshMinutes,
         sources: storedSources,
         ...(storedSiyuanName === undefined ? {} : {siyuan: {name: storedSiyuanName}}),

@@ -43,7 +43,9 @@ tests/                  纯函数测试，不依赖思源实例
 - 手动凭据不得明文落盘。加密不可用时保存直接失败；旧密文解不开时保留密文并提示重填，不回退明文。
 - 「从思源导入」是独立的一条数据源，全局最多一条：落盘只有 `siyuan.name`，服务商/桶名/地域/凭据每次渲染与查询都从 `window.siyuan.config.sync.s3` 现读；导入入口只在数据源页右上角，导入后只能改名或移除。
 - `saveData` 后必须 `loadData` 读回校验（`settings-store.ts`）。
-- 所有 UI 颜色/边框/字体使用 `--b3-*` 变量；对话框容器与滚动正文常驻 `will-change: transform`，打开时禁止程序性聚焦输入框。
+- 所有 UI 颜色/边框/字体使用 `--b3-*` 变量；错误文案统一取 `.s3u` 上的 `--s3u-error`（等于 `var(--b3-theme-error)`）。对话框容器与滚动正文常驻 `will-change: transform`，打开时禁止程序性聚焦输入框。
+- `fieldRow` 的行容器必须是 `div`，只有标签文字用 `<label for>` 关联控件：整行 `<label>` 会让点空白也聚焦输入框、弹出键盘或展开下拉。
+- 连接检查（设置页一键测试与表单内测试）都走 `testOneSource`：检查该源的全部桶，超时取 `testTimeoutSeconds`（默认 5 秒），与查询超时分开。
 - 预览图必须用思源本体 CSS 渲染：`assets/preview.html` 只放与 `ui/*.ts` 一致的 DOM，样式由 `scripts/render-preview.mjs` 从本机安装的思源注入（`SIYUAN_RESOURCES` 可覆盖路径），不要手写近似样式。
 - `plugin.json` 的 `name`、仓库名、安装目录名保持一致；`dev` 分支不发布，CD 只由 `main` 触发。
 

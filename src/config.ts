@@ -59,6 +59,8 @@ export interface StoredSiyuanImport {
 export interface StoredSettings {
     version: 1;
     timeoutSeconds: number;
+    /** 连接检查的超时（秒）。 */
+    testTimeoutSeconds: number;
     /** 自动刷新间隔（分钟）；0 表示只在手动点击时刷新。 */
     refreshMinutes: number;
     /** 只包含手动填写的数据源。 */
@@ -70,6 +72,7 @@ export interface StoredSettings {
 export interface PluginSettings {
     version: 1;
     timeoutSeconds: number;
+    testTimeoutSeconds: number;
     refreshMinutes: number;
     sources: DataSource[];
 }
@@ -78,12 +81,18 @@ export const DEFAULT_TIMEOUT_SECONDS = 30;
 export const MIN_TIMEOUT_SECONDS = 5;
 export const MAX_TIMEOUT_SECONDS = 300;
 
+/** 连接检查单独计时：只发一个轻量请求，默认 5 秒足够。 */
+export const DEFAULT_TEST_TIMEOUT_SECONDS = 5;
+export const MIN_TEST_TIMEOUT_SECONDS = 1;
+export const MAX_TEST_TIMEOUT_SECONDS = 60;
+
 /** 自动刷新只提供固定档位，避免用户填出 1 分钟这种会打满监控接口的值。 */
 export const REFRESH_MINUTES_OPTIONS = [0, 5, 10, 30] as const;
 
 export const DEFAULT_SETTINGS: PluginSettings = {
     version: 1,
     timeoutSeconds: DEFAULT_TIMEOUT_SECONDS,
+    testTimeoutSeconds: DEFAULT_TEST_TIMEOUT_SECONDS,
     refreshMinutes: 0,
     sources: [],
 };
@@ -305,11 +314,14 @@ export function mergeStoredSettings(raw: unknown): StoredSettings {
         });
     }
     const timeout = Math.round(numberIn(value.timeoutSeconds, DEFAULT_TIMEOUT_SECONDS));
+    const testTimeout = Math.round(numberIn(value.testTimeoutSeconds, DEFAULT_TEST_TIMEOUT_SECONDS));
     const refresh = Math.round(numberIn(value.refreshMinutes, 0));
     const siyuan = mergeSiyuanImport(value.siyuan, value.sources);
     return {
         version: 1,
         timeoutSeconds: Math.min(MAX_TIMEOUT_SECONDS, Math.max(MIN_TIMEOUT_SECONDS, timeout)),
+        // 旧配置没有这个字段，一律回退到 5 秒
+        testTimeoutSeconds: Math.min(MAX_TEST_TIMEOUT_SECONDS, Math.max(MIN_TEST_TIMEOUT_SECONDS, testTimeout)),
         // 旧配置没有这个字段；非法档位一律回到「不自动刷新」
         refreshMinutes: (REFRESH_MINUTES_OPTIONS as readonly number[]).includes(refresh) ? refresh : 0,
         sources,
