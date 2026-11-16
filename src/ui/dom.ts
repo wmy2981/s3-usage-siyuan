@@ -59,10 +59,22 @@ export function labeledIconButton(className: string, iconName: string, text: str
     return node;
 }
 
-/** 一行「标签 + 控件」，用思源设置页的 b3-label 结构。 */
+/**
+ * 一行「标签 + 控件」，用思源设置页的 b3-label 结构。
+ *
+ * 整行不能是 `<label>`：那样点这一行的空白处也会聚焦输入框、弹出键盘或展开下拉。
+ * 只有标签文字用 `<label for>` 关联控件，点空白不再触发。
+ */
+let fieldSeq = 0;
+
 export function fieldRow(label: string, control: HTMLElement, hint = ""): HTMLElement {
-    const row = el("label", "b3-label s3u__field");
-    const text = el("div", "b3-label__text", label);
+    const row = el("div", "b3-label s3u__field");
+    if (control.id === "") {
+        fieldSeq += 1;
+        control.id = `s3u-field-${fieldSeq}`;
+    }
+    const text = el("label", "b3-label__text", label);
+    text.htmlFor = control.id;
     row.append(text);
     const body = el("div", "s3u__field-body");
     body.append(control);
