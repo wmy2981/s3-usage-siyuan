@@ -29,6 +29,7 @@ import type {T} from "../i18n";
 import type {BucketUsage} from "../providers/types";
 import {PROVIDER_META} from "../providers/meta";
 import {queryBucket, QueryError} from "../query";
+import {bindMobileDrawer, isMobileFrontend} from "./drawer";
 import {clear, el, fieldRow, iconButton, labeledIconButton} from "./dom";
 import {renderSourceList, SourceForm} from "./source-form";
 
@@ -74,6 +75,8 @@ export class UsageDialog {
     private querying = false;
     private testing = false;
     private testResults?: SourceTestResult[];
+    /** 移动端抽屉的清理函数；桌面端为空。 */
+    private disposeDrawer?: () => void;
 
     constructor(options: UsageDialogOptions) {
         this.t = options.t;
@@ -104,22 +107,36 @@ export class UsageDialog {
         this.view = view;
         this.editing = undefined;
         this.adding = view === "sources" && this.settings.sources.length === 0;
+        // 移动端整窗改成宿主的底部抽屉；桌面端仍是原来的居中弹窗
+        const drawer = isMobileFrontend();
         this.dialog = new Dialog({
             title: this.t("dialogTitle"),
-            width: "min(1040px, 92vw)",
+            width: drawer ? "100%" : "min(1040px, 92vw)",
+            hideCloseIcon: drawer,
             content: '<div class="b3-dialog__content"><div class="s3u"></div><div class="s3u__live" role="status" aria-live="polite" aria-atomic="true"></div></div>',
             containerClassName: DIALOG_CLASS,
             destroyCallback: () => {
+                this.disposeDrawer?.();
+                this.disposeDrawer = undefined;
                 this.stopTimer();
                 this.dialog = undefined;
                 this.root = undefined;
                 this.live = undefined;
             },
         });
-        this.root = this.dialog.element.querySelector<HTMLElement>(".s3u") ?? undefined;
-        this.live = this.dialog.element.querySelector<HTMLElement>(".s3u__live") ?? undefined;
+        const dialogElement = this.dialog.element;
+        this.root = dialogElement.querySelector<HTMLElement>(".s3u") ?? undefined;
+        this.live = dialogElement.querySelector<HTMLElement>(".s3u__live") ?? undefined;
         if (!this.root) {
             return;
+        }
+        const sheet = dialogElement.querySelector<HTMLElement>(".b3-dialog__container");
+        if (drawer && sheet) {
+            this.disposeDrawer = bindMobileDrawer({
+                dialog: dialogElement,
+                sheet,
+                close: () => this.destroy(),
+            });
         }
         // 新对话框从空白开始，重新播一次正文入场动画
         this.renderedView = undefined;

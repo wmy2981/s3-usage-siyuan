@@ -20,6 +20,30 @@
     overflow: auto;
 }
 
+/*
+ * 移动端抽屉：外观全借宿主的 `.mobile-bottom-sheet-dialog` / `.mobile-bottom-sheet`
+ * （圆角、抓手、滑入滑出），这里只覆盖原生 60vh 的上限，并让正文在抽屉内部滚动。
+ * 选择器重复类名压过原生规则，免得依赖两张样式表的先后顺序。
+ */
+.mobile-bottom-sheet-dialog.mobile-bottom-sheet-dialog .s3u__sheet {
+    width: 100%;
+    max-width: none;
+    /* 首帧兜底：bind 之后高度由 drawer.ts 按视口比例写成行内值 */
+    height: 70vh;
+    max-height: none;
+    padding-top: 0;
+}
+
+.s3u__sheet-handle {
+    cursor: grab;
+    touch-action: none;
+}
+
+.mobile-bottom-sheet-dialog .s3u__sheet .b3-dialog__content {
+    max-height: none;
+    min-height: 0;
+}
+
 .s3u {
     /* 界面上的错误文案统一用这一支红，取思源主题的报错色 */
     --s3u-error: var(--b3-theme-error);

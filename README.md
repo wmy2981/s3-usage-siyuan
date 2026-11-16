@@ -31,6 +31,7 @@ View bucket usage of S3-compatible object storage inside SiYuan: storage size, o
 - Credentials encrypted with the SiYuan **data repo key** before being written to the plugin directory; the ciphertext follows workspace sync, so another device with the same repo key can decrypt it.
 - One S3 sync configuration can be imported from SiYuan as a standalone data source: the plugin stores only the name you give it, while provider, bucket, region and credentials are read live from the SiYuan settings on every query. Importing is allowed once; afterwards the entry can only be renamed or removed.
 - Bilingual UI (English / Simplified Chinese), desktop and mobile.
+- On mobile (app and mobile browser) the whole dialog is a native SiYuan bottom drawer shared by every page: 70% of the viewport by default, resizable by the handle, dismissed by dragging down.
 
 ## Requirements
 
