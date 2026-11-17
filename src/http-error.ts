@@ -8,7 +8,12 @@ export function parseJsonBody(body: string): unknown {
     }
 }
 
-/** 把服务端错误体压成一句话；不包含任何请求头。 */
+/**
+ * 把服务端错误体压成一句话；不包含任何请求头。
+ *
+ * 只取错误码与错误消息：原始响应体由 `Response body` 段完整展示，
+ * 这里再拼一遍会让卡片与复制内容翻倍。
+ */
 export function serverErrorText(status: number, body: string): string {
     const trimmed = body.trim();
     if (trimmed === "") {
@@ -32,5 +37,5 @@ export function serverErrorText(status: number, body: string): string {
             return `HTTP ${status}: ${combined}`;
         }
     }
-    return `HTTP ${status}: ${trimmed.slice(0, 300)}`;
+    return `HTTP ${status}`;
 }

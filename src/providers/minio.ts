@@ -45,11 +45,11 @@ function parseMinioUsage(body: string, bucket: string): BucketUsage {
     try {
         payload = JSON.parse(body);
     } catch {
-        throw new ProviderError("Unexpected MinIO response: not JSON");
+        throw new ProviderError(`Unexpected MinIO response: not JSON\nResponse body:\n${body}`);
     }
     const entry = firstBucketEntry(payload, bucket);
     if (!entry) {
-        throw new ProviderError(`MinIO returned no usage for bucket ${bucket}`);
+        throw new ProviderError(`MinIO returned no usage for bucket ${bucket}\nResponse body:\n${body}`);
     }
     const sizeFallback = asNumber(jsonPath(payload, "bucketsSizes", bucket));
     const lastUpdate = jsonPath(payload, "lastUpdate");
@@ -68,7 +68,7 @@ function parseMinioUsage(body: string, bucket: string): BucketUsage {
 async function requestUsage(
     ctx: Parameters<ProviderDefinition["query"]>[0],
     path: string,
-): Promise<{status: number; body: string}> {
+): Promise<ForwardResponse> {
     const endpoint = requireEndpoint(ctx.source);
     const url = `${endpoint}${path}`;
     const region = ctx.source.region.trim() === "" ? "us-east-1" : ctx.source.region.trim();
@@ -88,7 +88,7 @@ async function requestUsage(
         headers,
         contentType: "application/json",
     });
-    return {status: response.status, body: response.body};
+    return response;
 }
 
 interface PrometheusSample {
@@ -186,7 +186,7 @@ async function fetchMetrics(ctx: Parameters<ProviderDefinition["query"]>[0]): Pr
         response = await scrape(`${endpoint}/minio/metrics/v3/bucket/api/${encodeURIComponent(ctx.bucket)}`);
     }
     if (response.status !== 200) {
-        throw providerError(response.status, response.body);
+        throw providerError(response);
     }
     return response.body;
 }
@@ -207,7 +207,7 @@ export const minio: ProviderDefinition = {
             response = await requestUsage(ctx, "/minio/admin/v4/datausageinfo");
         }
         if (response.status !== 200) {
-            throw providerError(response.status, response.body);
+            throw providerError(response);
         }
         const usage = parseMinioUsage(response.body, ctx.bucket);
         const notes = ["noteMinioRealtime"];

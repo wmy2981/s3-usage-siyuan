@@ -6,6 +6,7 @@
  */
 import {detectProvider, readSyncS3Config, type DataSource} from "./config";
 import {ForwardError, forward} from "./net";
+import {diagnosticSection, detailedErrorText} from "./diagnostics";
 import {providerFor} from "./providers/registry";
 import {PROVIDER_META} from "./providers/meta";
 import type {BucketUsage} from "./providers/types";
@@ -23,13 +24,13 @@ export class QueryError extends Error {
     }
 }
 
-function effectiveSource(source: DataSource): DataSource {
+function effectiveSource(source: DataSource, bucket: string, timeoutSeconds: number): DataSource {
     if (!source.useSyncConfig) {
         return source;
     }
     const config = readSyncS3Config();
     if (!config) {
-        throw new QueryError("config", "SiYuan has no usable S3 sync configuration");
+        throw new QueryError("config", withQueryContext(new Error("SiYuan has no usable S3 sync configuration"), source, bucket, timeoutSeconds));
     }
     const provider = detectProvider(config.endpoint);
     return {
@@ -44,6 +45,28 @@ function effectiveSource(source: DataSource): DataSource {
     };
 }
 
+function sourceContext(source: DataSource, bucket: string, timeoutSeconds: number): string {
+    return [
+        `Source ID: ${source.id}`,
+        `Source name: ${source.name || "(unnamed)"}`,
+        `Provider: ${source.provider}`,
+        `Bucket: ${bucket}`,
+        `Endpoint: ${source.endpoint || "(not set)"}`,
+        `Region: ${source.region || "(not set)"}`,
+        `Account ID / Project ID: ${source.accountId || "(not set)"}`,
+        `Uses SiYuan sync config: ${source.useSyncConfig}`,
+        `Credential state: ${source.credentialsError ? source.credentialsErrorReason : "loaded"}`,
+        `Access key: ${source.accessKey ? "[SET, REDACTED]" : "(empty)"}`,
+        `Secret key: ${source.secretKey ? "[SET, REDACTED]" : "(empty)"}`,
+        `Timeout: ${timeoutSeconds} seconds`,
+        `Client time: ${new Date().toISOString()}`,
+    ].join("\n");
+}
+
+function withQueryContext(error: unknown, source: DataSource, bucket: string, timeoutSeconds: number): string {
+    return detailedErrorText(error) + diagnosticSection("Data source and query", sourceContext(source, bucket, timeoutSeconds));
+}
+
 export interface QueryOutcome {
     usage?: BucketUsage;
     error?: {kind: QueryErrorKind; message: string};
@@ -56,27 +79,28 @@ export async function queryBucket(
     timeoutSeconds: number,
 ): Promise<BucketUsage> {
     if (bucket.trim() === "") {
-        throw new QueryError("config", "Bucket is empty");
+        throw new QueryError("config", withQueryContext(new Error("Bucket is empty"), source, bucket, timeoutSeconds));
     }
-    const effective = effectiveSource(source);
+    const effective = effectiveSource(source, bucket.trim(), timeoutSeconds);
+    const configError = (message: string) => new QueryError("config", withQueryContext(new Error(message), effective, bucket, timeoutSeconds));
     if (effective.credentialsError) {
-        throw new QueryError("config", "Credentials cannot be decrypted");
+        throw configError(`Credentials cannot be decrypted: ${effective.credentialsErrorReason}`);
     }
     const meta = PROVIDER_META[effective.provider];
     if (effective.accessKey.trim() === "") {
-        throw new QueryError("config", "Access Key is required");
+        throw configError("Access Key is required");
     }
     if (meta.secretKeyRequired && effective.secretKey.trim() === "") {
-        throw new QueryError("config", "Secret Key is required");
+        throw configError("Secret Key is required");
     }
     if (meta.endpointRequired && effective.endpoint.trim() === "") {
-        throw new QueryError("config", "Endpoint is required");
+        throw configError("Endpoint is required");
     }
     if (meta.regionRequired && effective.region.trim() === "") {
-        throw new QueryError("config", "Region is required");
+        throw configError("Region is required");
     }
     if (meta.accountIdRequired && effective.accountId.trim() === "") {
-        throw new QueryError("config", "Account ID is required");
+        throw configError("Account ID is required");
     }
     try {
         return await providerFor(effective.provider).query({
@@ -86,18 +110,19 @@ export async function queryBucket(
             request: (request) => forward(request, Math.max(5, timeoutSeconds) * 1000),
         });
     } catch (error) {
+        const context = withQueryContext(error, effective, bucket.trim(), timeoutSeconds);
         if (error instanceof QueryError) {
-            throw error;
+            throw new QueryError(error.kind, context);
         }
         if (error instanceof ForwardError) {
-            throw new QueryError("network", error.message);
+            throw new QueryError("network", context);
         }
         if (error instanceof ProviderError) {
             if (/403|AccessDenied|SignatureDoesNotMatch|InvalidAccessKey|AuthFailure|Unauthorized|Forbidden/i.test(error.message)) {
-                throw new QueryError("auth", error.message);
+                throw new QueryError("auth", context);
             }
-            throw new QueryError("provider", error.message);
+            throw new QueryError("provider", context);
         }
-        throw new QueryError("provider", error instanceof Error ? error.message : String(error));
+        throw new QueryError("provider", context);
     }
 }

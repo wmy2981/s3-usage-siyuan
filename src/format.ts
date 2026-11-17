@@ -1,4 +1,5 @@
 /** 展示层格式化：字节、数量、时间与 HTML 转义。 */
+import {detailedErrorText} from "./diagnostics";
 
 const SIZE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB", "EB"];
 
@@ -32,10 +33,15 @@ export function formatTimestamp(timestamp: number | undefined): string {
     return new Date(timestamp).toLocaleString();
 }
 
-/** 把错误对象变成一句可展示的文本。 */
+/** 把错误对象变成一句可展示的文本；完整堆栈与原因都保留。 */
 export function errorText(error: unknown): string {
+    return detailedErrorText(error);
+}
+
+/** 全局气泡只有几秒且不能复制，只放一句话；完整诊断留在卡片与状态区。 */
+export function errorSummary(error: unknown): string {
     if (error instanceof Error) {
         return error.message;
     }
-    return typeof error === "string" ? error : String(error);
+    return typeof error === "string" ? error : detailedErrorText(error);
 }

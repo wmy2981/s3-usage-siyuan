@@ -9,6 +9,7 @@
  * 项目 ID：华为没有「仅用 AK/SK 换取项目 ID」的接口，只能由用户在控制台复制。
  */
 import {regionFromEndpoint} from "../config";
+import {requestSection} from "../diagnostics";
 import {signHuaweiSdk, huaweiUrl} from "../sign/huawei-sdk";
 import {signObsV2, virtualHostBucketUrl} from "../sign/oss-v1";
 import {asNumber, jsonPath, numberAt, parseXml, recordAt} from "../xml";
@@ -22,7 +23,7 @@ const CES_PERIOD_SECONDS = 3600;
 function parseStorageInfo(body: string): BucketUsage {
     const root = recordAt(parseXml(body), "GetBucketStorageInfoResult");
     if (!root) {
-        throw new ProviderError("Unexpected OBS response: missing GetBucketStorageInfoResult");
+        throw new ProviderError(`Unexpected OBS response: missing GetBucketStorageInfoResult\nResponse body:\n${body}`);
     }
     const classes: StorageClassUsage[] = [];
     const addClass = (key: string, name: string, storageKey: string, objectKey: string) => {
@@ -91,13 +92,14 @@ async function cesSeries(
     });
     const response = await ctx.request({url, method: "GET", headers, contentType: "application/json"});
     if (response.status !== 200) {
-        throw providerError(response.status, response.body);
+        throw providerError(response);
     }
     let payload: unknown;
     try {
         payload = JSON.parse(response.body);
     } catch {
-        throw new ProviderError("Unexpected CES response: not JSON");
+        throw new ProviderError(`Unexpected CES response: not JSON\nResponse body:\n${response.body}` +
+            requestSection(response));
     }
     return parseCesDatapoints(payload, filter);
 }
@@ -132,7 +134,7 @@ export const huaweiObs: ProviderDefinition = {
             contentType: "application/json",
         });
         if (response.status !== 200) {
-            throw providerError(response.status, response.body);
+            throw providerError(response);
         }
         const usage = parseStorageInfo(response.body);
         const notes = ["noteObsDelay"];

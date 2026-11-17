@@ -406,6 +406,73 @@
 
 /* ---------- 加载 / 错误 / 空状态 ---------- */
 
+/* 报错卡片底部：复制与重试并排 */
+.s3u__error-actions {
+    display: flex;
+    align-items: center;
+    align-self: flex-end;
+    gap: 4px;
+}
+
+.s3u__copy {
+    flex: 0 0 auto;
+    color: var(--b3-theme-on-surface);
+    opacity: 0.6;
+}
+
+.s3u__copy:hover,
+.s3u__copy:focus-visible {
+    opacity: 1;
+}
+
+/* 点完鼠标还停在按钮上，宿主的 hover 规则特异性更高，这里必须压过它 */
+.s3u__copy--done,
+.s3u__copy--done:hover,
+.s3u__copy--done:focus-visible {
+    color: var(--b3-theme-success) !important;
+    opacity: 1;
+}
+
+.s3u__copy--failed,
+.s3u__copy--failed:hover,
+.s3u__copy--failed:focus-visible {
+    color: var(--s3u-error) !important;
+    opacity: 1;
+}
+
+/* 复制用的离屏 textarea，只在 execCommand 回退时短暂存在 */
+.s3u__copy-buffer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.s3u__note--row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+/* 行内排版时圆点属于文字，否则会被 flex 的 gap 推开 */
+.s3u__note--row::before {
+    content: none;
+}
+
+.s3u__note--row .s3u__note-text::before {
+    content: "· ";
+}
+
+.s3u__note-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .s3u__skeleton {
     display: flex;
     flex-direction: column;
@@ -447,8 +514,15 @@
 }
 
 .s3u__error-text {
+    width: 100%;
+    max-height: 60vh;
+    overflow: auto;
     color: var(--s3u-error);
+    font-family: var(--b3-font-family-code);
     font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     word-break: break-word;
     -webkit-user-select: text;
     user-select: text;
@@ -585,24 +659,42 @@
     font-size: 12px;
 }
 
+/* 源名称占固定的一列：错误正文再长也不能把它挤没 */
 .s3u__test-name {
-    min-width: 0;
+    flex: 0 0 auto;
+    max-width: 45%;
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.s3u__test-message {
-    flex: 0 1 auto;
+.s3u__test-message-wrap {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    flex: 1 1 0;
     min-width: 0;
-    color: var(--b3-theme-on-surface);
-    text-align: right;
-    word-break: break-word;
 }
 
+.s3u__test-message {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-height: 60vh;
+    overflow: auto;
+    color: var(--b3-theme-on-surface);
+    text-align: left;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+/* 只有失败详情需要等宽；「连接正常」这类提示用正文字体 */
 .s3u__test-message--error {
     color: var(--s3u-error);
+    font-family: var(--b3-font-family-code);
 }
 
 .s3u__source-list {
@@ -706,9 +798,26 @@
 
 .s3u__status {
     min-height: 0;
+    max-height: 60vh;
     margin-top: 6px;
+    overflow: auto;
     font-size: 12px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     word-break: break-word;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.s3u__status-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.s3u__status-text {
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .s3u__status:empty {
@@ -717,6 +826,7 @@
 
 .s3u__status[data-kind="error"] {
     color: var(--s3u-error);
+    font-family: var(--b3-font-family-code);
 }
 
 .s3u__status[data-kind="success"] {
@@ -829,6 +939,13 @@
         width: 32px;
         height: 32px;
         padding: 0;
+    }
+
+    /* 抽屉只有 70% 屏高，60vh 会撑破卡片并套一层滚动 */
+    .s3u__error-text,
+    .s3u__test-message,
+    .s3u__status {
+        max-height: 32vh;
     }
 
     .s3u__source-row {

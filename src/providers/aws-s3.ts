@@ -12,7 +12,7 @@
  */
 import {signAwsV4} from "../sign/aws-v4";
 import {arrayAt, asNumber, parseXml, recordAt, stringAt} from "../xml";
-import {requireAccessKey, requireRegion, requireSecretKey} from "./helpers";
+import {requireAccessKey, requireRegion, requireSecretKey, providerError} from "./helpers";
 import {MONITOR_WINDOW_MS, sumDefined, withMetrics} from "./monitoring";
 import type {ProviderDefinition, StorageClassUsage} from "./types";
 import {ProviderError} from "./types";
@@ -97,12 +97,6 @@ export function parseListMetricsFilters(body: string): string[] {
     return filters;
 }
 
-function metricError(body: string): string {
-    const root = recordAt(parseXml(body), "ErrorResponse");
-    const error = recordAt(root, "Error");
-    return [stringAt(error, "Code"), stringAt(error, "Message")].filter(Boolean).join(": ");
-}
-
 interface MetricQuery {
     metricName: string;
     unit: "Bytes" | "Count";
@@ -160,7 +154,7 @@ async function requestMetric(
         contentType: "application/x-www-form-urlencoded; charset=utf-8",
     });
     if (response.status !== 200) {
-        throw new ProviderError(metricError(response.body) || response.body.slice(0, 300) || `HTTP ${response.status}`);
+        throw providerError(response);
     }
     return response.body;
 }
@@ -216,7 +210,7 @@ async function listRequestMetricFilters(
         contentType: "application/x-www-form-urlencoded; charset=utf-8",
     });
     if (response.status !== 200) {
-        throw new ProviderError(metricError(response.body) || response.body.slice(0, 300) || `HTTP ${response.status}`);
+        throw providerError(response);
     }
     return parseListMetricsFilters(response.body);
 }

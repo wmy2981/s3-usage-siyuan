@@ -13,7 +13,7 @@ import {
 } from "../config";
 import type {T} from "../i18n";
 import {PROVIDER_META, PROVIDER_ORDER, type ProviderMeta} from "../providers/meta";
-import {button, el, fieldRow, icon, iconButton} from "./dom";
+import {button, clear, copyButton, el, fieldRow, icon, iconButton} from "./dom";
 
 export interface SourceFormOptions {
     t: T;
@@ -181,9 +181,6 @@ export class SourceForm {
         root.append(this.accessRow, this.secretRow);
 
         this.status = el("div", "s3u__status");
-        this.status.setAttribute("role", "status");
-        this.status.setAttribute("aria-live", "polite");
-        this.status.setAttribute("aria-atomic", "true");
         root.append(this.status);
 
         const actions = el("div", "s3u__editor-actions");
@@ -238,9 +235,21 @@ export class SourceForm {
         }
     }
 
-    private showStatus(message: string, kind: "info" | "error" | "success"): void {
-        this.status.textContent = message;
+    /** 「请填写」这类校验提示自己就能改，不需要复制；只有真正的失败才给复制按钮。 */
+    private showStatus(message: string, kind: "info" | "error" | "success", copyable = kind === "error"): void {
+        clear(this.status);
         this.status.dataset.kind = kind;
+        const row = el("div", "s3u__status-row");
+        const text = el("span", "s3u__status-text", message);
+        // 只让文字进 live region：否则读屏会把「复制」按钮也念一遍
+        text.setAttribute("role", "status");
+        text.setAttribute("aria-live", "polite");
+        text.setAttribute("aria-atomic", "true");
+        row.append(text);
+        if (copyable) {
+            row.append(copyButton(() => message, this.t("copy"), this.t("copied"), this.t("copyFailed")));
+        }
+        this.status.append(row);
     }
 
     /** 从控件读一遍，防止用户输入后没有触发 input 事件（例如浏览器自动填充）。 */
@@ -292,7 +301,7 @@ export class SourceForm {
         }
         const problem = this.validate(source);
         if (problem) {
-            this.showStatus(problem, "error");
+            this.showStatus(problem, "error", false);
             return;
         }
         this.saveButton.disabled = true;
@@ -312,7 +321,7 @@ export class SourceForm {
         const source = this.readDraft();
         const problem = this.validate(source);
         if (problem) {
-            this.showStatus(problem, "error");
+            this.showStatus(problem, "error", false);
             return;
         }
         this.testButton.disabled = true;

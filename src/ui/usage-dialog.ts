@@ -20,6 +20,7 @@ import {
 } from "../config";
 import {canEncrypt} from "../secret";
 import {
+    errorSummary,
     errorText,
     formatBytes,
     formatCount,
@@ -30,7 +31,7 @@ import type {BucketUsage} from "../providers/types";
 import {PROVIDER_META} from "../providers/meta";
 import {queryBucket, QueryError} from "../query";
 import {bindMobileDrawer, isMobileFrontend} from "./drawer";
-import {clear, el, fieldRow, iconButton, labeledIconButton} from "./dom";
+import {clear, copyButton, el, fieldRow, iconButton, labeledIconButton} from "./dom";
 import {renderSourceList, SourceForm} from "./source-form";
 
 const DIALOG_CLASS = "s3u-dialog";
@@ -42,6 +43,8 @@ interface SourceTestResult {
     name: string;
     ok: boolean;
     message: string;
+    /** 校验提示（例如「请至少填写一个存储桶」）自己能改，不给复制按钮。 */
+    copyable?: boolean;
 }
 
 interface BucketResult {
@@ -392,9 +395,12 @@ export class UsageDialog {
         const message = this.errorMessage(source, result.error);
         box.append(el("div", "s3u__error-title", this.t("queryFailed")));
         box.append(el("div", "s3u__error-text", message));
+        // 复制和重试放在同一行：报错时用户先复制，再刷新
+        const actions = el("div", "s3u__error-actions");
         const retry = iconButton("iconRefresh", this.t("retry"));
         retry.addEventListener("click", () => void this.queryOne(source, bucket));
-        box.append(retry);
+        actions.append(copyButton(() => message, this.t("copy"), this.t("copied"), this.t("copyFailed")), retry);
+        box.append(actions);
         return box;
     }
 
@@ -406,18 +412,19 @@ export class UsageDialog {
             return this.t("errorNetwork", {message: error.message});
         }
         if (error.kind === "auth") {
-            return this.t("errorAuth");
+            return `${this.t("errorAuth")}\n\n${error.message}`;
         }
         if (source.credentialsError) {
-            return source.credentialsErrorReason === "unavailable"
+            const reason = source.credentialsErrorReason === "unavailable"
                 ? this.t("encryptionUnavailable")
                 : this.t("credentialUnreadable");
+            return `${reason}\n\n${error.message}`;
         }
         if (source.useSyncConfig && !readSyncS3Config()) {
-            return this.t("importMissing");
+            return `${this.t("importMissing")}\n\n${error.message}`;
         }
         if (error.kind === "config" && (source.accessKey === "" || (PROVIDER_META[source.provider].secretKeyRequired && source.secretKey === ""))) {
-            return this.t("credentialMissing");
+            return `${this.t("credentialMissing")}\n\n${error.message}`;
         }
         return error.message || this.t("errorUnknown");
     }
@@ -485,8 +492,17 @@ export class UsageDialog {
 
     private noteList(className: string, messages: string[]): HTMLElement {
         const list = el("div", className);
+        const isError = className.includes("--error");
         for (const message of messages) {
-            list.append(el("div", "s3u__note", this.t(message)));
+            const text = this.t(message);
+            if (!isError) {
+                list.append(el("div", "s3u__note", text));
+                continue;
+            }
+            const row = el("div", "s3u__note s3u__note--row");
+            row.append(el("span", "s3u__note-text", text));
+            row.append(copyButton(() => text, this.t("copy"), this.t("copied"), this.t("copyFailed")));
+            list.append(row);
         }
         return list;
     }
@@ -574,7 +590,7 @@ export class UsageDialog {
             showMessage(this.t("settingsSaved"), 2000, "info");
             this.render();
         } catch (error) {
-            showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
+            showMessage(this.t("sourceSaveFailed", {message: errorSummary(error)}), 5000, "error");
             this.render();
         }
     }
@@ -589,7 +605,7 @@ export class UsageDialog {
                     this.render();
                     showMessage(this.t("siyuanImportRemoved"), 2500, "info");
                 } catch (error) {
-                    showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
+                    showMessage(this.t("sourceSaveFailed", {message: errorSummary(error)}), 5000, "error");
                 }
             })();
         }, undefined, true);
@@ -748,7 +764,7 @@ export class UsageDialog {
             this.settings = await this.onSave({...this.settings, timeoutSeconds});
             showMessage(this.t("settingsSaved"), 2000, "info");
         } catch (error) {
-            showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
+            showMessage(this.t("sourceSaveFailed", {message: errorSummary(error)}), 5000, "error");
             this.render();
         }
     }
@@ -761,7 +777,7 @@ export class UsageDialog {
             this.settings = await this.onSave({...this.settings, testTimeoutSeconds});
             showMessage(this.t("settingsSaved"), 2000, "info");
         } catch (error) {
-            showMessage(this.t("sourceTestFailed", {message: errorText(error)}), 5000, "error");
+            showMessage(this.t("sourceTestFailed", {message: errorSummary(error)}), 5000, "error");
             this.render();
         }
     }
@@ -776,7 +792,7 @@ export class UsageDialog {
             // 新档位可能让现有数据立即过期
             this.tick();
         } catch (error) {
-            showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
+            showMessage(this.t("sourceSaveFailed", {message: errorSummary(error)}), 5000, "error");
             this.render();
         }
     }
@@ -842,7 +858,7 @@ export class UsageDialog {
                     this.render();
                     showMessage(this.t("credentialsCleared"), 2500, "info");
                 } catch (error) {
-                    showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
+                    showMessage(this.t("sourceSaveFailed", {message: errorSummary(error)}), 5000, "error");
                 }
             })();
         }, undefined, true);
@@ -857,10 +873,10 @@ export class UsageDialog {
                     this.dropResults();
                     this.render();
                 } catch (error) {
-                    showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
+                    showMessage(this.t("sourceSaveFailed", {message: errorSummary(error)}), 5000, "error");
                 }
             })();
-        });
+        }, undefined, true);
     }
 
     /** 导入只做一次：已存在就不再新增；之后只能改名或移除。 */
@@ -883,7 +899,7 @@ export class UsageDialog {
             this.editing = undefined;
             this.render();
         } catch (error) {
-            showMessage(this.t("sourceSaveFailed", {message: errorText(error)}), 5000, "error");
+            showMessage(this.t("sourceSaveFailed", {message: errorSummary(error)}), 5000, "error");
         }
     }
 
@@ -892,20 +908,24 @@ export class UsageDialog {
             return undefined;
         }
         const box = el("div", "s3u__test-results");
-        box.setAttribute("role", "status");
-        box.setAttribute("aria-live", "polite");
         const head = el("div", "s3u__settings-head");
         head.append(el("div", "s3u__settings-title", this.t("testResultsTitle")));
         const failed = this.testResults.filter((item) => !item.ok).length;
-        head.append(el("div", "s3u__test-summary",
-            this.t("testSummary", {total: this.testResults.length, failed})));
+        const summary = el("div", "s3u__test-summary",
+            this.t("testSummary", {total: this.testResults.length, failed}));
+        // live region 只包汇总文字，逐行的复制按钮不进播报
+        summary.setAttribute("role", "status");
+        summary.setAttribute("aria-live", "polite");
+        head.append(summary);
         box.append(head);
         for (const item of this.testResults) {
             const row = el("div", "s3u__test-row");
-            row.append(
-                el("div", "s3u__test-name", item.name),
-                el("div", item.ok ? "s3u__test-message" : "s3u__test-message s3u__test-message--error", item.message),
-            );
+            const wrap = el("div", "s3u__test-message-wrap");
+            wrap.append(el("div", item.ok ? "s3u__test-message" : "s3u__test-message s3u__test-message--error", item.message));
+            if (!item.ok && item.copyable !== false) {
+                wrap.append(copyButton(() => item.message, this.t("copy"), this.t("copied"), this.t("copyFailed")));
+            }
+            row.append(el("div", "s3u__test-name", item.name), wrap);
             box.append(row);
         }
         return box;
@@ -935,6 +955,7 @@ export class UsageDialog {
             return {
                 name: label,
                 ok: false,
+                copyable: false,
                 message: this.t(source.useSyncConfig ? "importMissing" : "sourceBucketsRequired"),
             };
         }

@@ -8,6 +8,11 @@
  * 转发接口要求管理员角色；发布服务访客是只读角色，必然 403，界面会按「发不出去」提示。
  */
 import {fetchSyncPost} from "siyuan";
+import {
+    diagnosticSection,
+    detailedErrorText,
+    requestDetailsText,
+} from "./diagnostics";
 import type {ForwardRequest, ForwardResponse} from "./providers/types";
 
 const FORWARD_PROXY_API = "/api/network/forwardProxy";
@@ -40,6 +45,8 @@ interface ForwardEnvelope {
  */
 export async function forward(request: ForwardRequest, timeoutMs: number): Promise<ForwardResponse> {
     const timeout = Math.min(120_000, Math.max(5_000, Math.round(timeoutMs)));
+    // 诊断文本只在失败分支生成：成功响应（例如 MinIO 的大 JSON、Prometheus 文本）不做任何额外格式化。
+    const diagnostics = {request, timeoutMs: timeout};
     let response: ForwardEnvelope;
     try {
         response = await fetchSyncPost(FORWARD_PROXY_API, {
@@ -54,18 +61,25 @@ export async function forward(request: ForwardRequest, timeoutMs: number): Promi
             redirect: false,
         }) as unknown as ForwardEnvelope;
     } catch (error) {
-        throw new ForwardError(error instanceof Error ? error.message : String(error));
+        throw new ForwardError(`forwardProxy threw an exception: ${detailedErrorText(error)}` +
+            diagnosticSection("Request", requestDetailsText(request, timeout)));
     }
     if (response.code !== 0) {
-        throw new ForwardError(response.msg || `forwardProxy code ${response.code}`);
+        throw new ForwardError(`forwardProxy code: ${response.code}\nMessage: ${response.msg || "(empty)"}\n` +
+            `Raw response: ${JSON.stringify(response)}` +
+            diagnosticSection("Request", requestDetailsText(request, timeout)));
     }
     const data = response.data;
     if (!data || typeof data.status !== "number") {
-        throw new ForwardError("forwardProxy returned no response data");
+        throw new ForwardError(`forwardProxy returned no response data\nRaw response: ${JSON.stringify(response)}` +
+            diagnosticSection("Request", requestDetailsText(request, timeout)));
     }
+    // 非 2xx 不能在这里抛出：OSS 403、MinIO 404/401/403 都是适配器明确支持的回退信号。
+    // 传输层只旁路附带诊断，不替业务层决定成功或失败。
     return {
         status: data.status,
         body: typeof data.body === "string" ? data.body : "",
         headers: data.headers ?? null,
+        diagnostics,
     };
 }

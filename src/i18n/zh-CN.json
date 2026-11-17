@@ -119,6 +119,8 @@
   "errorUnknown": "未知错误",
   "settingsNote": "只查询用量数据，不接账单接口；服务商数据可能有延迟。",
   "copy": "复制",
+  "copied": "已复制",
+  "copyFailed": "复制失败",
   "noteOssDelay": "OSS 统计非实时，延时可能超过 1 小时。",
   "noteCosDelay": "COS 监控数据约延迟 2 小时。",
   "noteObsDelay": "OBS 桶存量为后台统计，可能有延时。",

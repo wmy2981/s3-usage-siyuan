@@ -77,12 +77,12 @@ function latestValue(body: string): StatValue {
     try {
         payload = JSON.parse(body);
     } catch {
-        throw new ProviderError("Unexpected Qiniu response: not JSON");
+        throw new ProviderError(`Unexpected Qiniu response: not JSON\nResponse body:\n${body}`);
     }
     const times = jsonPath(payload, "times");
     const datas = jsonPath(payload, "datas");
     if (!Array.isArray(times) || !Array.isArray(datas)) {
-        throw new ProviderError("Unexpected Qiniu response: missing times/datas");
+        throw new ProviderError(`Unexpected Qiniu response: missing times/datas\nResponse body:\n${body}`);
     }
     let latest: StatValue = {};
     for (let index = 0; index < Math.min(times.length, datas.length); index++) {
@@ -136,7 +136,7 @@ async function requestQiniu(
         contentType: CONTENT_TYPE,
     });
     if (response.status !== 200) {
-        throw providerError(response.status, response.body);
+        throw providerError(response);
     }
     return response.body;
 }
@@ -169,7 +169,7 @@ export function sumQiniuSeries(body: string, field: string): number | undefined 
     try {
         payload = JSON.parse(body);
     } catch {
-        throw new ProviderError("Unexpected Qiniu response: not JSON");
+        throw new ProviderError(`Unexpected Qiniu response: not JSON\nResponse body:\n${body}`);
     }
     if (Array.isArray(payload)) {
         return sumDefined(payload.map((row) => asNumber(jsonPath(row, "values", field))));

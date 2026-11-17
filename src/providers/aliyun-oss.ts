@@ -5,6 +5,7 @@
  * 官方明确统计非实时，延时可能超过 1 小时；低频/归档的 Storage 是计费口径。
  */
 import {regionFromEndpoint} from "../config";
+import {requestSection} from "../diagnostics";
 import {aliyunRpcUrl} from "../sign/aliyun-rpc";
 import {signV2, virtualHostBucketUrl} from "../sign/oss-v1";
 import {signOssV4} from "../sign/oss-v4";
@@ -17,7 +18,7 @@ import {ProviderError} from "./types";
 function parseStat(body: string): BucketUsage {
     const root = recordAt(parseXml(body), "BucketStat");
     if (!root) {
-        throw new ProviderError("Unexpected OSS response: missing BucketStat");
+        throw new ProviderError(`Unexpected OSS response: missing BucketStat\nResponse body:\n${body}`);
     }
     const classes: StorageClassUsage[] = [];
     const addClass = (key: string, name: string, storageKey: string, objectKey: string) => {
@@ -112,16 +113,18 @@ async function cmsMetric(
         });
         const response = await ctx.request({url, method: "GET", headers: {}, contentType: "application/json"});
         if (response.status !== 200) {
-            throw providerError(response.status, response.body);
+            throw providerError(response);
         }
         let payload: unknown;
         try {
             payload = JSON.parse(response.body);
         } catch {
-            throw new ProviderError("Unexpected CloudMonitor response: not JSON");
+            throw new ProviderError(`Unexpected CloudMonitor response: not JSON\nResponse body:\n${response.body}` +
+                requestSection(response));
         }
         if (jsonPath(payload, "Success") === false) {
-            throw new ProviderError(String(jsonPath(payload, "Message") ?? "CloudMonitor query failed"));
+            throw new ProviderError(`${String(jsonPath(payload, "Message") ?? "CloudMonitor query failed")}\nResponse body:\n${response.body}` +
+                requestSection(response));
         }
         values.push(...parseCmsDatapoints(payload));
         const token = jsonPath(payload, "NextToken");
@@ -178,7 +181,7 @@ export const aliyunOss: ProviderDefinition = {
             response = await request({url, method: "GET", headers: v1Headers, contentType});
         }
         if (response.status !== 200) {
-            throw providerError(response.status, response.body);
+            throw providerError(response);
         }
         const usage = parseStat(response.body);
         const notes = ["noteOssDelay"];

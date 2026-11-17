@@ -5,6 +5,7 @@
  * scope 终止串是 `request`，Authorization 的逗号后不带空格。子资源 `?stat` 必须出现在
  * CanonicalQueryString 里写成 `stat=`，否则签名对不上。
  */
+import {detailedErrorText, requestSection} from "../diagnostics";
 import {signAwsV4} from "../sign/aws-v4";
 import {virtualHostBucketUrl} from "../sign/oss-v1";
 import {asNumber, jsonPath, numberAt, parseXml, recordAt} from "../xml";
@@ -33,7 +34,7 @@ const QPS_METRICS = [
 function parseTosStat(body: string): BucketUsage {
     const root = recordAt(parseXml(body), "BucketStat");
     if (!root) {
-        throw new ProviderError("Unexpected TOS response: missing BucketStat");
+        throw new ProviderError(`Unexpected TOS response: missing BucketStat\nResponse body:\n${body}`);
     }
     const classes: StorageClassUsage[] = [];
     const addClass = (key: string, name: string, nodeName: string) => {
@@ -140,17 +141,19 @@ async function cmSeries(
         contentType: "application/json",
     });
     if (response.status !== 200) {
-        throw providerError(response.status, response.body);
+        throw providerError(response);
     }
     let payload: unknown;
     try {
         payload = JSON.parse(response.body);
     } catch {
-        throw new ProviderError("Unexpected CloudMonitor response: not JSON");
+        throw new ProviderError(`Unexpected CloudMonitor response: not JSON\nResponse body:\n${response.body}` +
+            requestSection(response));
     }
     const error = jsonPath(payload, "ResponseMetadata", "Error");
     if (error) {
-        throw new ProviderError(String(jsonPath(error, "Message") ?? "CloudMonitor query failed"));
+        throw new ProviderError(`${String(jsonPath(error, "Message") ?? "CloudMonitor query failed")}\nResponse body:\n${response.body}` +
+            requestSection(response));
     }
     return parseVolcanoPoints(payload);
 }
@@ -158,6 +161,7 @@ async function cmSeries(
 /** 流量与请求数：带宽（MB/s）与 QPS 都按周期积分成 24 小时总量。 */
 async function queryTraffic(
     ctx: Parameters<ProviderDefinition["query"]>[0],
+    errors: string[],
 ): Promise<{trafficInBytes?: number; trafficOutBytes?: number; requestCount?: number}> {
     const [outgoing, incoming] = await Promise.all([
         cmSeries(ctx, "bandwidth", BANDWIDTH_METRICS.out),
@@ -167,7 +171,8 @@ async function queryTraffic(
     const rates = await Promise.all(QPS_METRICS.map(async (name) => {
         try {
             return await cmSeries(ctx, "qps", name);
-        } catch {
+        } catch (error) {
+            errors.push(`Metric ${name}: ${detailedErrorText(error)}`);
             return [];
         }
     }));
@@ -217,12 +222,12 @@ export const volcanoTos: ProviderDefinition = {
             contentType: "application/json",
         });
         if (response.status !== 200) {
-            throw providerError(response.status, response.body);
+            throw providerError(response);
         }
         const usage = parseTosStat(response.body);
         const notes = ["noteTosDelay"];
         const errors: string[] = [];
-        const metrics = await withMetrics(() => queryTraffic(ctx), errors);
+        const metrics = await withMetrics(() => queryTraffic(ctx, errors), errors);
         if (metrics.trafficInBytes !== undefined || metrics.trafficOutBytes !== undefined || metrics.requestCount !== undefined) {
             notes.push("noteMetricsWindow", "noteVolcDerived");
         }

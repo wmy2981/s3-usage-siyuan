@@ -6,8 +6,9 @@
  * 存储类指标单位是 MB，这里统一换算成字节；对象数和请求数是「个/次」。
  */
 import {signTc3} from "../sign/tencent-tc3";
+import {diagnosticSection, requestSection} from "../diagnostics";
 import {asNumber, jsonPath} from "../xml";
-import {cosAppId, requireAccessKey, requireSecretKey} from "./helpers";
+import {cosAppId, providerError, requireAccessKey, requireSecretKey} from "./helpers";
 import {MONITOR_WINDOW_MS, sumDefined} from "./monitoring";
 import type {ProviderDefinition, StorageClassUsage} from "./types";
 import {ProviderError} from "./types";
@@ -151,12 +152,18 @@ async function getMetric(
             return undefined;
         }
     })();
+    // 只在失败时拼：成功路径不为诊断付任何格式化成本
+    const context = () => `Provider: Tencent Cloud COS\nOperation: GetMonitorData\nMetric: ${metric}\nBucket: ${bucket}\nAPPID: ${appId}\nRegion: ${MONITOR_REGION}`;
     if (response.status !== 200) {
-        throw new ProviderError(errorOf(parsed) || response.body.slice(0, 300) || `HTTP ${response.status}`);
+        const error = providerError(response);
+        error.message += diagnosticSection("Operation", context());
+        throw error;
     }
     const message = errorOf(parsed);
     if (message !== "") {
-        throw new ProviderError(message);
+        throw new ProviderError(`${message}${diagnosticSection("Response body", response.body || "(empty response body)")}` +
+            requestSection(response) +
+            diagnosticSection("Operation", context()));
     }
     return options.sum === true ? summedCosPoint(parsed) : latestPoint(parsed);
 }

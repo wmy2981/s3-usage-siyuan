@@ -2,6 +2,7 @@
 import type {DataSource} from "../config";
 import {serverErrorText} from "../http-error";
 import {normalizeEndpoint} from "../config";
+import {diagnosticSection, requestSection, responseBodyText, responseHeadersText} from "../diagnostics";
 import type {ForwardResponse} from "./types";
 import {ProviderError} from "./types";
 
@@ -53,15 +54,18 @@ export function cosAppId(source: DataSource, bucket: string): string {
     throw new ProviderError("APPID is required (bucket name must end with -APPID or fill in Account ID)");
 }
 
-/** 服务端返回非 2xx 时，把 XML/JSON 错误体压成一句可读文本。 */
-export function providerError(status: number, body: string): ProviderError {
-    return new ProviderError(serverErrorText(status, body));
+/** 服务端返回非 2xx 时，把错误码摘要、响应头、完整响应体与请求上下文拼成一条错误。 */
+export function providerError(response: ForwardResponse): ProviderError {
+    return new ProviderError(serverErrorText(response.status, response.body) +
+        diagnosticSection("Response headers", responseHeadersText(response.headers)) +
+        diagnosticSection("Response body", responseBodyText(response.body)) +
+        requestSection(response));
 }
 
 /** 取 XML/JSON 响应前先按状态码拦截。 */
 export function ensureOk(response: ForwardResponse): ForwardResponse {
     if (response.status < 200 || response.status >= 300) {
-        throw providerError(response.status, response.body);
+        throw providerError(response);
     }
     return response;
 }

@@ -16,10 +16,18 @@ export interface ForwardRequest {
     contentType: string;
 }
 
+/** 出错的请求上下文；只在需要展示诊断时才格式化成文本。 */
+export interface ForwardDiagnostics {
+    request: ForwardRequest;
+    timeoutMs: number;
+}
+
 export interface ForwardResponse {
     status: number;
     body: string;
     headers: Record<string, string[]> | null;
+    /** 请求上下文引用，不预先格式化；成功路径不产生额外开销。 */
+    diagnostics?: ForwardDiagnostics;
 }
 
 export type RequestFn = (request: ForwardRequest) => Promise<ForwardResponse>;

@@ -119,6 +119,8 @@
   "errorUnknown": "Unknown error",
   "settingsNote": "Only usage data is queried; billing APIs are not used. Provider data may be delayed.",
   "copy": "Copy",
+  "copied": "Copied",
+  "copyFailed": "Copy failed",
   "noteOssDelay": "OSS statistics are not real-time; the delay can exceed 1 hour.",
   "noteCosDelay": "COS monitoring data is delayed by about 2 hours.",
   "noteObsDelay": "OBS bucket storage is background statistics and may be delayed.",

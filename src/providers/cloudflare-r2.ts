@@ -5,6 +5,7 @@
  * 请求数与带宽取最近 24 小时的合计（带宽字段是 bytesUpload / bytesDownload，
  * 不是 egress/ingress）。R2 的 GraphQL 是分析口径，不是计费口径。
  */
+import {requestSection} from "../diagnostics";
 import {asNumber, jsonPath} from "../xml";
 import {requireAccessKey, requireAccountId, providerError} from "./helpers";
 import type {BucketUsage, ProviderDefinition} from "./types";
@@ -139,15 +140,17 @@ export const cloudflareR2: ProviderDefinition = {
         try {
             payload = JSON.parse(response.body);
         } catch {
-            throw new ProviderError("Unexpected R2 response: not JSON");
+            throw new ProviderError(`Unexpected R2 response: not JSON\nResponse body:\n${response.body}` +
+                requestSection(response));
         }
         if (response.status !== 200) {
-            throw providerError(response.status, response.body);
+            throw providerError(response);
         }
         const errors = jsonPath(payload, "errors");
         if (Array.isArray(errors) && errors.length > 0) {
             const message = errors.map((item) => jsonPath(item, "message")).filter((item) => typeof item === "string");
-            throw new ProviderError(message.join("; ") || "Cloudflare GraphQL error");
+            throw new ProviderError(`${message.join("; ") || "Cloudflare GraphQL error"}\nResponse body:\n${response.body}` +
+                requestSection(response));
         }
         return parseR2Usage(payload);
     },

@@ -1,5 +1,6 @@
 /** 监控类指标的公共约定：窗口统一取最近 24 小时，失败时保留存储数据。 */
 import type {BucketUsage} from "./types";
+import {detailedErrorText} from "../diagnostics";
 
 /** 与 Cloudflare R2 保持一致的统计窗口。 */
 export const MONITOR_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -21,9 +22,9 @@ export async function withMetrics(
         return await run();
     } catch (error) {
         errors.push("noteMetricsFailed");
-        const message = error instanceof Error ? error.message : String(error);
+        const message = detailedErrorText(error);
         if (message !== "") {
-            errors.push(message.slice(0, 200));
+            errors.push(message);
         }
         return {};
     }

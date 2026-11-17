@@ -60,6 +60,76 @@ export function labeledIconButton(className: string, iconName: string, text: str
 }
 
 /**
+ * 复制文本：优先 Clipboard API，非安全上下文（局域网 IP 打开）或权限被拒时
+ * 退回 textarea + execCommand，保证网页端与桌面端都能用。
+ */
+export async function copyText(text: string): Promise<boolean> {
+    try {
+        if (window.isSecureContext && navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch {
+        // 继续走下面的回退
+    }
+    const active = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    const area = el("textarea", "s3u__copy-buffer");
+    try {
+        area.value = text;
+        area.setAttribute("readonly", "");
+        area.setAttribute("aria-hidden", "true");
+        document.body.append(area);
+        area.select();
+        // iOS Safari 只认 setSelectionRange，否则复制到空内容
+        area.setSelectionRange(0, text.length);
+        return document.execCommand("copy");
+    } catch {
+        return false;
+    } finally {
+        area.remove();
+        // 回退会把焦点挪到离屏 textarea，结束后还给原控件
+        if (active?.isConnected) {
+            active.focus({preventScroll: true});
+        }
+    }
+}
+
+/** 每个复制按钮自己的复位定时器，连续点击时先清掉上一个。 */
+const copyTimers = new WeakMap<HTMLElement, number>();
+
+/**
+ * 复制按钮：点击后短暂切换提示文字与图标颜色，不弹全局消息，避免打断阅读。
+ * 失败也给一次反馈，否则用户只会觉得「点了没反应」。
+ */
+export function copyButton(
+    getText: () => string,
+    label: string,
+    copiedLabel: string,
+    failedLabel = label,
+): HTMLButtonElement {
+    const node = iconButton("iconCopy", label, "block__icon block__icon--show s3u__copy");
+    const reset = (): void => {
+        node.classList.remove("s3u__copy--done", "s3u__copy--failed");
+        node.setAttribute("aria-label", label);
+    };
+    node.addEventListener("click", async () => {
+        const ok = await copyText(getText());
+        const previous = copyTimers.get(node);
+        if (previous !== undefined) {
+            window.clearTimeout(previous);
+        }
+        node.classList.toggle("s3u__copy--done", ok);
+        node.classList.toggle("s3u__copy--failed", !ok);
+        node.setAttribute("aria-label", ok ? copiedLabel : failedLabel);
+        copyTimers.set(node, window.setTimeout(() => {
+            copyTimers.delete(node);
+            reset();
+        }, 1500));
+    });
+    return node;
+}
+
+/**
  * 一行「标签 + 控件」，用思源设置页的 b3-label 结构。
  *
  * 整行不能是 `<label>`：那样点这一行的空白处也会聚焦输入框、弹出键盘或展开下拉。
