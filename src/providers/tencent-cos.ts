@@ -185,7 +185,6 @@ async function mapLimit<T, R>(items: T[], limit: number, run: (item: T) => Promi
 export const tencentCos: ProviderDefinition = {
     id: "tencentCos",
     labelKey: "providerTencentCos",
-    docsUrl: "https://cloud.tencent.com/document/product/248/45140",
     endpointRequired: false,
     regionRequired: true,
     accountIdRequired: false,

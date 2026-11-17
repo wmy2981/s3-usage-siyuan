@@ -4,6 +4,7 @@ import type {ProviderId} from "../config";
 export interface ProviderMeta {
     id: ProviderId;
     labelKey: string;
+    /** 面向用户的操作文档（如何获取凭据），不要填 API 参考。 */
     docsUrl: string;
     endpointRequired: boolean;
     regionRequired: boolean;
@@ -35,7 +36,7 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
     aliyunOss: {
         id: "aliyunOss",
         labelKey: "providerAliyunOss",
-        docsUrl: "https://help.aliyun.com/zh/oss/developer-reference/getbucketstat",
+        docsUrl: "https://help.aliyun.com/zh/ram/user-guide/create-an-accesskey-pair",
         endpointRequired: true,
         regionRequired: true,
         accountIdRequired: false,
@@ -47,7 +48,7 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
     tencentCos: {
         id: "tencentCos",
         labelKey: "providerTencentCos",
-        docsUrl: "https://cloud.tencent.com/document/product/248/45140",
+        docsUrl: "https://cloud.tencent.com/document/product/598/40488",
         endpointRequired: false,
         regionRequired: true,
         accountIdRequired: false,
@@ -59,7 +60,7 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
     huaweiObs: {
         id: "huaweiObs",
         labelKey: "providerHuaweiObs",
-        docsUrl: "https://support.huaweicloud.com/api-obs/obs_04_0054.html",
+        docsUrl: "https://support.huaweicloud.com/usermanual-ca/ca_01_0003.html",
         endpointRequired: true,
         regionRequired: false,
         accountIdRequired: false,
@@ -74,7 +75,7 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
     volcanoTos: {
         id: "volcanoTos",
         labelKey: "providerVolcanoTos",
-        docsUrl: "https://www.volcengine.com/docs/TorchObjectStorage/GetBucketStat",
+        docsUrl: "https://www.volcengine.com/docs/iam/api-access-key-management",
         endpointRequired: true,
         regionRequired: true,
         accountIdRequired: false,
@@ -86,7 +87,7 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
     qiniuKodo: {
         id: "qiniuKodo",
         labelKey: "providerQiniuKodo",
-        docsUrl: "https://developer.qiniu.com/kodo/3906/statistic-interface",
+        docsUrl: "https://developer.qiniu.com/kodo/kb/7450/the-third-party-plug-in-key-parameters",
         endpointRequired: false,
         regionRequired: false,
         accountIdRequired: false,
@@ -98,7 +99,7 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
     minio: {
         id: "minio",
         labelKey: "providerMinio",
-        docsUrl: "https://docs.min.io/aistor/reference/aistor-server/http-endpoints",
+        docsUrl: "https://docs.min.io/aistor/administration/iam",
         endpointRequired: true,
         regionRequired: false,
         accountIdRequired: false,
@@ -110,7 +111,7 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
     cloudflareR2: {
         id: "cloudflareR2",
         labelKey: "providerCloudflareR2",
-        docsUrl: "https://developers.cloudflare.com/r2/api/graphql/",
+        docsUrl: "https://developers.cloudflare.com/r2/api/tokens/",
         endpointRequired: false,
         regionRequired: false,
         accountIdRequired: true,
@@ -122,7 +123,7 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
     awsS3: {
         id: "awsS3",
         labelKey: "providerAwsS3",
-        docsUrl: "https://docs.aws.amazon.com/AmazonS3/latest/userguide/cloudwatch-monitoring.html",
+        docsUrl: "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html",
         endpointRequired: false,
         regionRequired: true,
         accountIdRequired: false,

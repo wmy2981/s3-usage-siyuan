@@ -107,7 +107,6 @@ async function cesSeries(
 export const huaweiObs: ProviderDefinition = {
     id: "huaweiObs",
     labelKey: "providerHuaweiObs",
-    docsUrl: "https://support.huaweicloud.com/api-obs/obs_04_0054.html",
     endpointRequired: true,
     regionRequired: false,
     accountIdRequired: false,

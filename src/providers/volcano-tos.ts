@@ -187,7 +187,6 @@ async function queryTraffic(
 export const volcanoTos: ProviderDefinition = {
     id: "volcanoTos",
     labelKey: "providerVolcanoTos",
-    docsUrl: "https://www.volcengine.com/docs/TorchObjectStorage/GetBucketStat",
     endpointRequired: true,
     regionRequired: true,
     accountIdRequired: false,

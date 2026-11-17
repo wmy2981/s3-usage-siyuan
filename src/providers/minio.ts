@@ -194,7 +194,6 @@ async function fetchMetrics(ctx: Parameters<ProviderDefinition["query"]>[0]): Pr
 export const minio: ProviderDefinition = {
     id: "minio",
     labelKey: "providerMinio",
-    docsUrl: "https://docs.min.io/aistor/reference/aistor-server/http-endpoints",
     endpointRequired: true,
     regionRequired: false,
     accountIdRequired: false,

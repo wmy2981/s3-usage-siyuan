@@ -227,7 +227,6 @@ async function mapLimit<T, R>(items: T[], limit: number, run: (item: T) => Promi
 export const qiniuKodo: ProviderDefinition = {
     id: "qiniuKodo",
     labelKey: "providerQiniuKodo",
-    docsUrl: "https://developer.qiniu.com/kodo/3906/statistic-interface",
     endpointRequired: false,
     regionRequired: false,
     accountIdRequired: false,

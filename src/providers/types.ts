@@ -68,8 +68,6 @@ export interface ProviderDefinition {
     id: ProviderId;
     /** i18n key，例如 provider.aliyunOss */
     labelKey: string;
-    /** 官方文档地址，设置页里作为「如何获取凭据」的链接 */
-    docsUrl: string;
     endpointRequired: boolean;
     regionRequired: boolean;
     accountIdRequired: boolean;

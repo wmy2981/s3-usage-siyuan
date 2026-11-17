@@ -139,7 +139,6 @@ async function cmsMetric(
 export const aliyunOss: ProviderDefinition = {
     id: "aliyunOss",
     labelKey: "providerAliyunOss",
-    docsUrl: "https://help.aliyun.com/zh/oss/developer-reference/getbucketstat",
     endpointRequired: true,
     regionRequired: false,
     accountIdRequired: false,

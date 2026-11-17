@@ -240,7 +240,6 @@ async function sumRequestMetric(
 export const awsS3: ProviderDefinition = {
     id: "awsS3",
     labelKey: "providerAwsS3",
-    docsUrl: "https://docs.aws.amazon.com/AmazonS3/latest/userguide/cloudwatch-monitoring.html",
     endpointRequired: false,
     regionRequired: true,
     accountIdRequired: false,

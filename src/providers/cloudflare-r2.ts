@@ -105,7 +105,6 @@ export function parseR2Usage(payload: unknown): BucketUsage {
 export const cloudflareR2: ProviderDefinition = {
     id: "cloudflareR2",
     labelKey: "providerCloudflareR2",
-    docsUrl: "https://developers.cloudflare.com/r2/platform/metrics-analytics/",
     endpointRequired: false,
     regionRequired: false,
     accountIdRequired: true,
