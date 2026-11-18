@@ -82,6 +82,10 @@ Manual credentials are encrypted with AES-256-GCM. The encryption key is derived
   - MinIO: metrics are cumulative since the server started, not a 24-hour window.
   - If the monitoring call fails (for example due to missing permissions), the card keeps storage and object counts and shows the reason in the notes.
 
+## Bazaar Stats Graph
+
+![Bazaar stats graph](https://siyuan-bazaar-stats-graph.sr1.cc.cd/api/chart/wmy2981/s3-usage-siyuan?metrics=downloads,rating,ratings&range=all&area=true&lang=en)
+
 ## Build
 
 ```bash

@@ -82,6 +82,10 @@
   - MinIO：指标是自服务启动以来的累计值，不是 24 小时窗口。
   - 监控接口调用失败（例如缺权限）时，卡片保留存储量与对象数，并在说明里给出原因。
 
+## 集市趋势图表
+
+![集市趋势图表](https://siyuan-bazaar-stats-graph.sr1.cc.cd/api/chart/wmy2981/s3-usage-siyuan?metrics=downloads,rating,ratings&range=all&area=true&lang=zh)
+
 ## 构建
 
 ```bash
