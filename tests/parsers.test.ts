@@ -140,6 +140,8 @@ describe("provider parsers", () => {
         };
         expect(parseCmsDatapoints(payload)).toEqual([10, 5]);
         expect(parseCmsDatapoints({Success: true, Datapoints: ""})).toEqual([]);
+        // null 不能当成 0，否则会把「没有数据」画成真实的零
+        expect(parseCmsDatapoints({Datapoints: JSON.stringify([{Average: null, Sum: 7}])})).toEqual([7]);
     });
 
     it("parses CES datapoints by statistic field", () => {

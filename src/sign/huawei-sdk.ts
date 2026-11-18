@@ -9,7 +9,7 @@
  * 1. 计算签名时 CanonicalURI 必须以 `/` 结尾（实际发送的 URL 可以不带）。
  * 2. CanonicalHeaders 每行自带换行，与下一段拼接后会多出一个空行，这是官方规定。
  */
-import {canonicalHeaderValue, hmac, sha256Hex, toHex, uriEncode} from "./util";
+import {byCodePoint, canonicalHeaderValue, hmac, sha256Hex, toHex, uriEncode} from "./util";
 
 export interface HuaweiSdkOptions {
     method: string;
@@ -28,10 +28,6 @@ export interface HuaweiSignedParts {
     canonicalRequest: string;
     /** 需要随请求发送的头（含 host、x-sdk-date 与调用方传入的头）。 */
     headers: Record<string, string>;
-}
-
-function byCodePoint(left: string, right: string): number {
-    return left < right ? -1 : left > right ? 1 : 0;
 }
 
 /** 按签名规则拼 URL：参数名升序，名与值都做 RFC3986 编码。 */

@@ -56,7 +56,9 @@ export async function forward(request: ForwardRequest, timeoutMs: number): Promi
             contentType: request.contentType,
             headers: Object.entries(request.headers).map(([name, value]) => ({[name]: value})),
             payload: request.body ?? "",
-            payloadEncoding: "text",
+            // 内核的 payloadEncoding 没有 `text` 分支（写 `text` 会得到一个空请求体，
+            // POST 的签名随即与请求体对不上）。`json` 对字符串 payload 原样发送。
+            payloadEncoding: "json",
             responseEncoding: "text",
             redirect: false,
         }) as unknown as ForwardEnvelope;

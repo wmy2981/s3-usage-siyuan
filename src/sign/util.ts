@@ -96,13 +96,18 @@ export function uriEncode(value: string, encodeSlash = true): string {
     return result;
 }
 
+/** 签名排序必须按字符码点，不能用受区域设置影响的 localeCompare。 */
+export function byCodePoint(left: string, right: string): number {
+    return left < right ? -1 : left > right ? 1 : 0;
+}
+
 /** 规范化查询串：按编码后的键、值排序，空值保留 `=`。 */
 export function canonicalQuery(params: Record<string, string | undefined>): string {
     return Object.entries(params)
         .filter(([, value]) => value !== undefined)
         .map(([key, value]) => [uriEncode(key), uriEncode(value ?? "")] as const)
         .sort(([leftKey, leftValue], [rightKey, rightValue]) =>
-            leftKey === rightKey ? leftValue.localeCompare(rightValue) : leftKey.localeCompare(rightKey)
+            leftKey === rightKey ? byCodePoint(leftValue, rightValue) : byCodePoint(leftKey, rightKey)
         )
         .map(([key, value]) => `${key}=${value}`)
         .join("&");
@@ -134,6 +139,8 @@ export function aliyunEncode(value: string): string {
     return encodeURIComponent(value)
         .replaceAll("+", "%20")
         .replaceAll("*", "%2A")
+        // encodeURIComponent 不编码 ! ' ( )，官方 percentEncode 要求一并转义
+        .replace(/[!'()]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
         .replaceAll("%7E", "~");
 }
 

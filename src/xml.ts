@@ -81,8 +81,14 @@ export function jsonPath(value: unknown, ...keys: string[]): unknown {
     return current;
 }
 
-/** 把 JSON 里的数字/字符串统一成 number。 */
+/** 把 JSON 里的数字/字符串统一成 number；null、空串与布尔值视为「没有值」，不能当 0。 */
 export function asNumber(value: unknown): number | undefined {
-    const parsed = typeof value === "number" ? value : Number(value);
+    if (typeof value === "number") {
+        return Number.isFinite(value) ? value : undefined;
+    }
+    if (typeof value !== "string" || value.trim() === "") {
+        return undefined;
+    }
+    const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : undefined;
 }

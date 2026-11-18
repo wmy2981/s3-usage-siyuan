@@ -106,6 +106,11 @@ function errorOf(payload: unknown): string {
     return [code, message].filter((item) => typeof item === "string" && item !== "").join(": ");
 }
 
+/** 腾讯云文档与 SDK 都使用不带毫秒的 RFC3339 时间（`2020-11-24T15:15:50+08:00`）。 */
+function isoSecond(date: Date): string {
+    return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 async function getMetric(
     ctx: Parameters<ProviderDefinition["query"]>[0],
     metric: string,
@@ -125,8 +130,8 @@ async function getMetric(
                 {Name: "bucket", Value: bucket},
             ],
         }],
-        StartTime: start.toISOString(),
-        EndTime: end.toISOString(),
+        StartTime: isoSecond(start),
+        EndTime: isoSecond(end),
     });
     const headers = await signTc3({
         url: MONITOR_URL,
@@ -143,7 +148,7 @@ async function getMetric(
         method: "POST",
         headers,
         body: payload,
-        contentType: "application/json; charset=utf-8",
+        contentType: "application/json",
     });
     const parsed = (() => {
         try {

@@ -32,6 +32,18 @@ describe("diagnostics do not change provider control flow", () => {
         expect(response.diagnostics?.request.url).toBe("https://example.com");
     });
 
+    it("sends the signed POST body with an encoding the kernel actually implements", async () => {
+        // 内核只处理 json 与各种二进制编码；`text` 不会写入 payload，签名会与空请求体对不上。
+        fetchSyncPost.mockResolvedValue({code: 0, data: {status: 200, body: "", headers: null}});
+        await forward({
+            url: "https://example.com/", method: "POST", headers: {}, body: '{"MetricName":"StdStorage"}',
+            contentType: "application/json",
+        }, 5000);
+        const sent = fetchSyncPost.mock.calls[0][1] as Record<string, unknown>;
+        expect(sent.payload).toBe('{"MetricName":"StdStorage"}');
+        expect(sent.payloadEncoding).toBe("json");
+    });
+
     it("still falls back from OSS V4 to V1 after a 403", async () => {
         const requests: string[] = [];
         const usage = await aliyunOss.query({

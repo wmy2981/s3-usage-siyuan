@@ -7,6 +7,7 @@ import {qiniuAuthorization, qiniuSigningString} from "../src/providers/qiniu-kod
 import {aliyunRpcUrl} from "../src/sign/aliyun-rpc";
 import {huaweiSignedParts, huaweiUrl, signHuaweiSdk} from "../src/sign/huawei-sdk";
 import {minioMetricsToken} from "../src/sign/minio-jwt";
+import {aliyunEncode} from "../src/sign/util";
 
 /** 固定时间，避免测试随时钟漂移。 */
 const fixedDate = new Date("2026-01-01T00:00:00Z");
@@ -36,6 +37,8 @@ describe("signing", () => {
     });
 
     it("matches an OSS V4 GET ?stat vector", async () => {
+        // Header 签名的默认签名头只有 content-type / content-md5 / x-oss-*，
+        // host 只在 AdditionalHeaders 中显式声明时才参与（见官方 V4 文档）。
         const headers = await signOssV4({
             method: "GET",
             url: "https://examplebucket.oss-cn-hangzhou.aliyuncs.com/?stat",
@@ -49,7 +52,7 @@ describe("signing", () => {
         });
         expect(headers.Authorization).toBe(
             "OSS4-HMAC-SHA256 Credential=LTAIEXAMPLE/20260101/cn-hangzhou/oss/aliyun_v4_request," +
-                "Signature=62d738fab17312aed487a60419ecb358525809cf3809232357d2868cbde0cf02",
+                "Signature=dfcbf931640839a92829bc0741ec6371b28722e72678da589b642f7bfa60ff9f",
         );
     });
 
@@ -91,8 +94,8 @@ describe("signing", () => {
         });
         expect(headers.Authorization).toBe(
             "TC3-HMAC-SHA256 Credential=AKIDz8krbsJ5yKBZQpn74WFkmLPx3EXAMPLE/2026-01-01/monitor/tc3_request, " +
-                "SignedHeaders=content-type;host;x-tc-action, " +
-                "Signature=fa60fd293d33b3639d2ea647e7885b79bd20340693d83781dcff4ef37ef0fc33",
+                "SignedHeaders=content-type;host, " +
+                "Signature=a2dd396978673a0b28ee819c75e712cf5484c1742ad122e493641937d005e609",
         );
     });
 
@@ -112,6 +115,11 @@ describe("signing", () => {
                 "X-Qiniu-Date: 20260101T000000Z\n\n",
         );
         expect(await qiniuAuthorization("qiniuAK", "qiniuSK", signing)).toBe("Qiniu qiniuAK:DEfDF88St1jTz1Z96Bz7Gu4uyOQ=");
+    });
+
+    it("percent-encodes characters that encodeURIComponent leaves alone", () => {
+        // 官方 RPC percentEncode：只保留 A-Z a-z 0-9 - _ . ~，空格、*、!、'、(、) 都要编码
+        expect(aliyunEncode("a!b'c(d)e*f g~")).toBe("a%21b%27c%28d%29e%2Af%20g~");
     });
 
     it("matches the documented Aliyun RPC signature example", async () => {

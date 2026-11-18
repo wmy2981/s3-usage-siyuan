@@ -53,7 +53,7 @@ tests/                  纯函数测试，不依赖思源实例
 ## 服务商实现备注
 
 - 阿里云 OSS：默认 OSS4-HMAC-SHA256（2025-09-01 后新建桶不再支持 V1）；403 时回退 V1。V4 的 CanonicalRequest 有 6 段，Canonical URI 带桶名，空值子资源写 `stat`（不补 `=`）。流量/请求数走云监控 `DescribeMetricList`（RPC 签名，`acs_oss_dashboard`，Period=60，24 小时求和）。
-- 腾讯云 COS：云监控 Region 固定 `ap-guangzhou`；存储类单位 MB，换算成字节；`x-tc-action` 参与签名时值转小写。流量/请求数取最近 24 小时求和，存储量仍取最新点。
+- 腾讯云 COS：云监控 Region 固定 `ap-guangzhou`；存储类单位 MB，换算成字节；TC3 签名按官方 Go / Python SDK 只签 `content-type` 与 `host`（`X-TC-*` 照常发送但不参与签名），POST 必须带真实请求体。流量/请求数取最近 24 小时求和，存储量仍取最新点。
 - 华为云 OBS：原生 V2 签名（HMAC-SHA1，Authorization 标签 `OBS`）；转发层会写 Content-Type，因此按 `application/json` 参与签名。流量/请求数走 CES `ShowMetricData`（SDK-HMAC-SHA256，CanonicalURI 签名时必须补结尾 `/`），URL 需要项目 ID（填在 Account ID）；请求数由 `request_count_per_second` 乘周期积分。
 - 火山引擎 TOS：TOS4-HMAC-SHA256；密钥派生起点是裸 SK；`?stat` 的 CanonicalQueryString 是 `stat=`。流量/请求数走云监控 `GetMetricData`（service 为 `cloudmonitor`，维度 `ResourceID` 即桶名），带宽与 QPS 为速率，按 1h 周期积分。
 - 七牛云：HMAC-SHA1 管理签名，签名串包含方法、原始 query、Host、Content-Type、`X-Qiniu-Date` 和末尾两个换行；URL-safe base64 保留 `=`。`blob_io` / `rs_put` 返回 `[{time, values}]` 数组，与 `space`/`count` 的 `times`/`datas` 不同。

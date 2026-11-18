@@ -48,10 +48,10 @@ export async function ossV4SigningKey(secretKey: string, dateStamp: string, regi
 export async function signOssV4(options: OssV4Options): Promise<Record<string, string>> {
     const date = options.date ?? new Date();
     const {amzDate, dateStamp} = amzDateParts(date);
-    const url = new URL(options.url);
+    // 默认参与 V4 签名的只有 content-type、content-md5 与全部 x-oss-* 头；
+    // host 只有在 AdditionalHeaders（预签名 URL）里显式声明时才参与，Header 签名不能带上它。
     const canonicalHeaders =
         `content-type:${canonicalHeaderValue(options.contentType)}\n` +
-        `host:${url.host.toLowerCase()}\n` +
         `x-oss-content-sha256:UNSIGNED-PAYLOAD\n` +
         `x-oss-date:${amzDate}\n`;
     // SDK 的拼接是：CanonicalHeaders（自带末尾换行）+ "\n" + AdditionalHeaders + "\n" + HashedPayload

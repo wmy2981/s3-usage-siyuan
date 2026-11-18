@@ -32,7 +32,7 @@ const QUERY = `query R2Usage($accountTag: string!, $bucketName: string!, $start:
       }
       r2BandwidthUsageAdaptiveGroups(
         limit: 1000
-        filter: {datetime_geq: $dayStart, datetime_leq: $end, bucketName: $bucketName}
+        filter: {datetime_geq: $dayStart, datetime_lt: $end, bucketName: $bucketName}
         orderBy: [datetimeHour_ASC]
       ) {
         sum { bytesUpload bytesDownload }

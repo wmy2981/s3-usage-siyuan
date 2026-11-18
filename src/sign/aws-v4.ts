@@ -7,6 +7,7 @@
  */
 import {
     amzDateParts,
+    byCodePoint,
     canonicalHeaderValue,
     canonicalQuery,
     hmac,
@@ -69,7 +70,7 @@ export async function signAwsV4(options: AwsV4Options): Promise<Record<string, s
 
     const normalized = Object.entries(headers)
         .map(([name, value]) => [name.toLowerCase(), canonicalHeaderValue(value)] as const)
-        .sort(([left], [right]) => left.localeCompare(right));
+        .sort(([left], [right]) => byCodePoint(left, right));
     const signedHeaders = normalized.map(([name]) => name).join(";");
     const canonicalHeaders = normalized.map(([name, value]) => `${name}:${value}\n`).join("");
 

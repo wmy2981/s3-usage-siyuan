@@ -9,7 +9,7 @@
  * Content-Type 必须与内核实际写到请求上的值完全一致——forwardProxy 会替我们写
  * `application/json`，所以这里也按这个值签。
  */
-import {hmac, rfc1123, toBase64} from "./util";
+import {byCodePoint, hmac, rfc1123, toBase64} from "./util";
 
 export interface V2SignOptions {
     method: string;
@@ -44,7 +44,7 @@ export async function signV2(options: V2SignOptions): Promise<Record<string, str
         }
     }
     const canonicalHeaders = Object.entries(vendorHeaders)
-        .sort(([left], [right]) => left.localeCompare(right))
+        .sort(([left], [right]) => byCodePoint(left, right))
         .map(([name, value]) => `${name}:${value.trim()}\n`)
         .join("");
     const stringToSign = [
