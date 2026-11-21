@@ -49,7 +49,8 @@ describe("i18n", () => {
     it("labels every storage class the providers can report", () => {
         // 与各适配器的 key 一一对应：usage-dialog 用 storageClass<Capitalized> 查表
         const keys = [
-            "standard", "ia", "line", "archive", "archiveFr", "coldArchive", "deepArchive", "glacier", "glacierIr",
+            "standard", "ia", "line", "archive", "archiveFr", "archiveIr", "intelligent", "coldArchive",
+            "deepArchive", "glacier", "glacierIr",
             "oneZoneIa", "reducedRedundancy", "intelligentFa", "intelligentIa", "intelligentAia",
             "intelligentAa", "intelligentDaa", "intelligentArchive",
         ];

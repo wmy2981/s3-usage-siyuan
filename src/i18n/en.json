@@ -106,6 +106,8 @@
   "storageClassStandard": "Standard",
   "storageClassIa": "Infrequent access",
   "storageClassArchiveFr": "Archive flash-back",
+  "storageClassArchiveIr": "Archive instant retrieval",
+  "storageClassIntelligent": "Intelligent tiering",
   "storageClassArchive": "Archive",
   "storageClassColdArchive": "Cold archive",
   "storageClassDeepArchive": "Deep archive",

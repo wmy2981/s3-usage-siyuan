@@ -32,6 +32,11 @@ const SPECS: StatSpec[] = [
     {path: "/v6/count_archive", key: "archive", name: "ARCHIVE", kind: "count"},
     {path: "/v6/space_deep_archive", key: "deepArchive", name: "DEEP_ARCHIVE", kind: "storage"},
     {path: "/v6/count_deep_archive", key: "deepArchive", name: "DEEP_ARCHIVE", kind: "count"},
+    // 官方统计接口里还有归档直读与智能分层两套存储类（数据统计接口文档）
+    {path: "/v6/space_archive_ir", key: "archiveIr", name: "ARCHIVE_IR", kind: "storage"},
+    {path: "/v6/count_archive_ir", key: "archiveIr", name: "ARCHIVE_IR", kind: "count"},
+    {path: "/v6/space_intelligent_tiering", key: "intelligent", name: "INTELLIGENT_TIERING", kind: "storage"},
+    {path: "/v6/count_intelligent_tiering", key: "intelligent", name: "INTELLIGENT_TIERING", kind: "count"},
 ];
 
 /** 七牛的 begin/end 是东八区的 14 位时间串，不能直接拿本机时区格式化。 */

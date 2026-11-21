@@ -106,6 +106,8 @@
   "storageClassStandard": "标准存储",
   "storageClassIa": "低频访问",
   "storageClassArchiveFr": "归档闪回",
+  "storageClassArchiveIr": "归档直读",
+  "storageClassIntelligent": "智能分层",
   "storageClassArchive": "归档存储",
   "storageClassColdArchive": "冷归档",
   "storageClassDeepArchive": "深度归档",

@@ -158,8 +158,9 @@ describe("Qiniu Kodo endpoint handling", () => {
         for (const url of urls) {
             expect(url.startsWith("https://api.qiniuapi.com/v6/")).toBe(true);
         }
-        expect(usage.storageBytes).toBe(4 * 1024);
-        expect(usage.objectCount).toBe(4 * 1024);
+        // 6 个存储类（标准/低频/归档/深度归档/归档直读/智能分层）各 1024 字节
+        expect(usage.storageBytes).toBe(6 * 1024);
+        expect(usage.objectCount).toBe(6 * 1024);
     });
 
     it("falls back to the public endpoint when the field is empty", async () => {
