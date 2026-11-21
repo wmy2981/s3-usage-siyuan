@@ -7,6 +7,7 @@ import {forward} from "../src/net";
 import type {DataSource} from "../src/config";
 import {aliyunOss} from "../src/providers/aliyun-oss";
 import {minio} from "../src/providers/minio";
+import {tencentCos} from "../src/providers/tencent-cos";
 
 function source(provider: DataSource["provider"]): DataSource {
     return {
@@ -83,6 +84,27 @@ describe("diagnostics do not change provider control flow", () => {
             message: expect.stringMatching(/SignatureVersionNotSupported[\s\S]*V4 attempt[\s\S]*Status: 403[\s\S]*AccessDenied/),
         });
         expect(calls).toBe(2);
+    });
+
+    it("keeps COS storage when only the traffic metrics fail", async () => {
+        const usage = await tencentCos.query({
+            source: source("tencentCos"), bucket: "photos-1250000000", timeoutMs: 5000,
+            request: async (request) => {
+                const metric = (JSON.parse(request.body ?? "{}") as {MetricName: string}).MetricName;
+                if (metric === "InboundTraffic") {
+                    return {status: 403, body: "no monitor permission", headers: null};
+                }
+                return {
+                    status: 200,
+                    body: JSON.stringify({Response: {DataPoints: [{Timestamps: [1767225600], Values: [1]}]}}),
+                    headers: null,
+                };
+            },
+        });
+        expect(usage.storageBytes).toBeGreaterThan(0);
+        expect(usage.objectCount).toBeGreaterThan(0);
+        expect(usage.trafficInBytes).toBeUndefined();
+        expect(usage.errors).toContain("noteMetricsFailed");
     });
 
     it("still falls back to the MinIO v4 usage endpoint after a 404", async () => {

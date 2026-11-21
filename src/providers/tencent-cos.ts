@@ -9,7 +9,7 @@ import {signTc3} from "../sign/tencent-tc3";
 import {diagnosticSection, requestSection} from "../diagnostics";
 import {asNumber, jsonPath} from "../xml";
 import {cosAppId, providerError, requireAccessKey, requireSecretKey} from "./helpers";
-import {MONITOR_WINDOW_MS, sumDefined} from "./monitoring";
+import {MONITOR_WINDOW_MS, sumDefined, withMetrics} from "./monitoring";
 import type {ProviderDefinition, StorageClassUsage} from "./types";
 import {ProviderError} from "./types";
 
@@ -208,19 +208,31 @@ export const tencentCos: ProviderDefinition = {
             4,
             (spec) => getMetric(ctx, spec.objectMetric ?? "", ctx.bucket, appId),
         );
-        const [multipart, inbound, outbound, requests] = await mapLimit(
-            [
-                {metric: "StdMultipartNumber", sum: false},
-                {metric: "InboundTraffic", sum: true},
-                {metric: "InternetTraffic", sum: true},
-                {metric: "TotalRequests", sum: true},
-            ],
-            4,
-            (spec) => getMetric(ctx, spec.metric, ctx.bucket, appId, {
-                sum: spec.sum,
-                windowMs: spec.sum ? MONITOR_WINDOW_MS : undefined,
-            }),
-        );
+        const errors: string[] = [];
+        // 云监控与桶本身是两套权限：流量/请求数查不到时只记 errors，
+        // 不能让整张卡片变成错误——否则没有监控权限的用户连容量都看不到。
+        const [multipart, traffic] = await Promise.all([
+            getMetric(ctx, "StdMultipartNumber", ctx.bucket, appId),
+            withMetrics(async () => {
+                const [inbound, outbound, requests] = await mapLimit(
+                    [
+                        {metric: "InboundTraffic"},
+                        {metric: "InternetTraffic"},
+                        {metric: "TotalRequests"},
+                    ],
+                    3,
+                    (spec) => getMetric(ctx, spec.metric, ctx.bucket, appId, {
+                        sum: true,
+                        windowMs: MONITOR_WINDOW_MS,
+                    }),
+                );
+                return {
+                    trafficInBytes: inbound.value,
+                    trafficOutBytes: outbound.value,
+                    requestCount: requests.value,
+                };
+            }, errors),
+        ]);
 
         const classes: StorageClassUsage[] = [];
         let storageBytes = 0;
@@ -252,19 +264,19 @@ export const tencentCos: ProviderDefinition = {
             }
         });
         const notes = ["noteCosDelay"];
-        if (inbound.value !== undefined || outbound.value !== undefined || requests.value !== undefined) {
+        if (traffic.trafficInBytes !== undefined || traffic.trafficOutBytes !== undefined
+            || traffic.requestCount !== undefined) {
             notes.push("noteMetricsWindow");
         }
         return {
             storageBytes: hasStorage ? storageBytes : undefined,
             objectCount: hasObjects ? objectCount : undefined,
             multipartCount: multipart.value,
-            trafficInBytes: inbound.value,
-            trafficOutBytes: outbound.value,
-            requestCount: requests.value,
             storageClasses: classes,
             dataTime: dataTime > 0 ? dataTime : undefined,
             notes,
+            errors,
+            ...traffic,
         };
     },
 };
