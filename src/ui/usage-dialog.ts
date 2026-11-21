@@ -1008,7 +1008,7 @@ export class UsageDialog {
             message: this.t("testFailedSummary", {
                 failed: failures.length,
                 total: source.buckets.length,
-                details: failures.join("；"),
+                details: failures.join(this.t("detailSeparator")),
             }),
         };
     }

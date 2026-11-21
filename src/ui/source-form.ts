@@ -296,10 +296,11 @@ export class SourceForm {
             missing.push(this.t(meta.accessKeyLabelKey));
         }
         if (meta.secretKeyRequired && source.secretKey === "") {
-            missing.push(this.t("sourceSecretKey"));
+            // 与服务商自己的叫法保持一致（腾讯云 SecretKey、阿里云 AccessKey Secret）
+            missing.push(this.t(meta.secretKeyLabelKey));
         }
         if (missing.length > 0) {
-            return this.t("sourceInvalid", {fields: missing.join("、")});
+            return this.t("sourceInvalid", {fields: missing.join(this.t("listSeparator"))});
         }
         return undefined;
     }
