@@ -19,6 +19,7 @@ describe("provider parsers", () => {
   <StandardStorage>430</StandardStorage>
   <StandardObjectCount>66</StandardObjectCount>
   <InfrequentAccessStorage>2359296</InfrequentAccessStorage>
+  <InfrequentAccessRealStorage>360</InfrequentAccessRealStorage>
   <InfrequentAccessObjectCount>54</InfrequentAccessObjectCount>
   <DeepColdArchiveStorage>10</DeepColdArchiveStorage>
   <DeepColdArchiveObjectCount>1</DeepColdArchiveObjectCount>
@@ -28,6 +29,8 @@ describe("provider parsers", () => {
         expect(usage.multipartCount).toBe(40);
         expect(usage.dataTime).toBe(1643341269000);
         expect(usage.storageClasses?.map((item) => item.key)).toEqual(["standard", "ia", "deepArchive"]);
+        // 分类明细取实际存储量：计费口径（2359296）会因 64 KB 最小计费单位与总量对不上
+        expect(usage.storageClasses?.[1].storageBytes).toBe(360);
     });
 
     it("parses OBS GetBucketStorageInfo", () => {

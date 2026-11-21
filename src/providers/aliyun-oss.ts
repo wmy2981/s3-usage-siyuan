@@ -2,7 +2,8 @@
  * 阿里云 OSS：GetBucketStat（`GET /?stat`）。
  *
  * 返回桶总存储量、对象数、未完成分片与各存储类型明细；默认 OSS V4 签名，403 时回退 V1。
- * 官方明确统计非实时，延时可能超过 1 小时；低频/归档的 Storage 是计费口径。
+ * 官方明确统计非实时，延时可能超过 1 小时；分类明细取 *RealStorage（实际存储量），
+ * 与顶层的 Storage 同一口径，计费口径的 *Storage 会因 64 KB 最小计费单位而偏大。
  */
 import {regionFromEndpoint} from "../config";
 import {diagnosticSection, requestSection, responseBodyText} from "../diagnostics";
@@ -28,11 +29,13 @@ function parseStat(body: string): BucketUsage {
             classes.push({key, name, storageBytes, objectCount});
         }
     };
+    // 顶层 Storage 是「实际存储量」；各存储类的 *Storage 是「计费存储量」（不足 64 KB 按 64 KB 算），
+    // 这里统一取 *RealStorage，否则分类明细加起来与顶栏总量对不上。
     addClass("standard", "StandardStorage", "StandardStorage", "StandardObjectCount");
-    addClass("ia", "InfrequentAccessStorage", "InfrequentAccessStorage", "InfrequentAccessObjectCount");
-    addClass("archive", "ArchiveStorage", "ArchiveStorage", "ArchiveObjectCount");
-    addClass("coldArchive", "ColdArchiveStorage", "ColdArchiveStorage", "ColdArchiveObjectCount");
-    addClass("deepArchive", "DeepColdArchiveStorage", "DeepColdArchiveStorage", "DeepColdArchiveObjectCount");
+    addClass("ia", "InfrequentAccessStorage", "InfrequentAccessRealStorage", "InfrequentAccessObjectCount");
+    addClass("archive", "ArchiveStorage", "ArchiveRealStorage", "ArchiveObjectCount");
+    addClass("coldArchive", "ColdArchiveStorage", "ColdArchiveRealStorage", "ColdArchiveObjectCount");
+    addClass("deepArchive", "DeepColdArchiveStorage", "DeepColdArchiveRealStorage", "DeepColdArchiveObjectCount");
 
     const storageBytes = numberAt(root, "Storage") ?? classes.reduce((sum, item) => sum + (item.storageBytes ?? 0), 0);
     const objectCount = numberAt(root, "ObjectCount") ?? classes.reduce((sum, item) => sum + (item.objectCount ?? 0), 0);
