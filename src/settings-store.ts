@@ -138,14 +138,16 @@ export async function saveSettings(plugin: Plugin, settings: PluginSettings): Pr
         });
     }
     const storedSiyuanName = siyuan === undefined ? undefined : text(siyuan.name);
-    const stored: StoredSettings = {
+    // 先按读回时的规则归一化再写：否则越界超时、重复 id 这类值写进去会被读回时钳制，
+    // 紧接着的精确比对必然失败，用户看到「保存失败」但数据其实已经落盘。
+    const stored: StoredSettings = mergeStoredSettings({
         version: 1,
         timeoutSeconds: next.timeoutSeconds,
         testTimeoutSeconds: next.testTimeoutSeconds,
         refreshMinutes: next.refreshMinutes,
         sources: storedSources,
         ...(storedSiyuanName === undefined ? {} : {siyuan: {name: storedSiyuanName}}),
-    };
+    });
     const response = await plugin.saveData(STORAGE_NAME, stored) as {code?: number; msg?: string} | undefined;
     if (response && typeof response.code === "number" && response.code !== 0) {
         throw new SettingsError(response.msg || `saveData code ${response.code}`, "verify");
@@ -154,12 +156,18 @@ export async function saveSettings(plugin: Plugin, settings: PluginSettings): Pr
     if (!sameStoredSettings(stored, verified)) {
         throw new SettingsError("Saved data did not match what was written", "verify");
     }
+    const persistedById = new Map(stored.sources.map((source) => [source.id, source]));
     return {
         ...next,
-        // 返回落盘后的归一化字段，避免内存里仍是未经规范化的 Endpoint
+        // 返回落盘后的归一化字段：内存里不能留着被钳制掉的值，否则界面显示与磁盘不一致
+        timeoutSeconds: stored.timeoutSeconds,
+        testTimeoutSeconds: stored.testTimeoutSeconds,
+        refreshMinutes: stored.refreshMinutes,
         sources: [
-            ...manual.map((source, index) => {
-                const persisted = stored.sources[index];
+            // 按 id 关联而不是按下标：mergeStoredSettings 会去重、迁移旧条目，
+            // 下标一旦错位，界面拿到的就是别的数据源的字段。
+            ...manual.map((source) => {
+                const persisted = persistedById.get(source.id);
                 if (!persisted) {
                     return source;
                 }

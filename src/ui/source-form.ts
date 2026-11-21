@@ -212,11 +212,20 @@ export class SourceForm {
         return meta.accountIdRequired || meta.accountIdOptional === true;
     }
 
+    /** Endpoint / 地域一栏：必填固然显示，标注为可选的也要显示，否则那些参数根本填不进去。 */
+    private endpointVisible(meta: ProviderMeta): boolean {
+        return meta.endpointRequired || meta.endpointOptional === true;
+    }
+
+    private regionVisible(meta: ProviderMeta): boolean {
+        return meta.regionRequired || meta.regionOptional === true;
+    }
+
     /** 只改可见性，不销毁控件；隐藏的字段仍然保留用户输入。 */
     private applyProviderVisibility(): void {
         const meta = PROVIDER_META[this.draft.provider];
-        this.endpointRow.hidden = !meta.endpointRequired;
-        this.regionRow.hidden = !meta.regionRequired;
+        this.endpointRow.hidden = !this.endpointVisible(meta);
+        this.regionRow.hidden = !this.regionVisible(meta);
         this.accountRow.hidden = !this.accountVisible(meta);
         const accountLabel = this.accountRow.firstElementChild;
         if (accountLabel instanceof HTMLElement) {
@@ -286,10 +295,11 @@ export class SourceForm {
             missing.push(this.t(meta.accessKeyLabelKey));
         }
         if (meta.secretKeyRequired && source.secretKey === "") {
-            missing.push(this.t("sourceSecretKey"));
+            // 与服务商自己的叫法保持一致（腾讯云 SecretKey、阿里云 AccessKey Secret）
+            missing.push(this.t(meta.secretKeyLabelKey));
         }
         if (missing.length > 0) {
-            return this.t("sourceInvalid", {fields: missing.join("、")});
+            return this.t("sourceInvalid", {fields: missing.join(this.t("listSeparator"))});
         }
         return undefined;
     }
@@ -338,13 +348,6 @@ export class SourceForm {
         } finally {
             this.testButton.disabled = false;
             this.testLabel.textContent = this.t("sourceTest");
-        }
-    }
-
-    /** 更新外部传入的凭据错误状态（例如保存后重新载入）。 */
-    setCredentialsError(unreadable: boolean): void {
-        if (unreadable) {
-            this.showStatus(this.t("credentialUnreadable"), "error");
         }
     }
 }

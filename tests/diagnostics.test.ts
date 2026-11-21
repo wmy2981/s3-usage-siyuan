@@ -1,9 +1,17 @@
 import {describe, expect, it} from "vitest";
-import {detailedErrorText, requestDetailsText, requestHeadersText, responseBodyText} from "../src/diagnostics";
+import {
+    detailedErrorText,
+    redact,
+    requestDetailsText,
+    requestHeadersText,
+    responseBodyText,
+    responseHeadersText,
+} from "../src/diagnostics";
 import {providerError} from "../src/providers/helpers";
 import {withMetrics} from "../src/providers/monitoring";
 import {tencentCos} from "../src/providers/tencent-cos";
 import type {DataSource} from "../src/config";
+import {errorSummary} from "../src/format";
 
 describe("error diagnostics", () => {
     it("preserves provider codes, request IDs, headers and the complete body", () => {
@@ -61,9 +69,16 @@ describe("error diagnostics", () => {
         const responseBody = JSON.stringify({Response: {Error: {
             Code: "AuthFailure.UnauthorizedOperation", Message: "no monitor permission",
         }, RequestId: "cos-request-id"}});
+        // 只让 StdStorage 失败：存储类指标是并发查询的，让所有请求都失败会由最先返回的那个决定报错
         await expect(tencentCos.query({
             source, bucket: "photos-1250000000", timeoutMs: 5000,
-            request: async () => ({status: 403, body: responseBody, headers: {"x-request-id": ["cos-request-id"]}}),
+            request: async (request) => {
+                const metric = (JSON.parse(request.body ?? "{}") as {MetricName: string}).MetricName;
+                if (metric !== "StdStorage") {
+                    return {status: 200, body: JSON.stringify({Response: {DataPoints: []}}), headers: null};
+                }
+                return {status: 403, body: responseBody, headers: {"x-request-id": ["cos-request-id"]}};
+            },
         })).rejects.toMatchObject({message: expect.stringMatching(/no monitor permission[\s\S]*cos-request-id[\s\S]*Metric: StdStorage/)});
     });
 
@@ -122,5 +137,34 @@ describe("error diagnostics", () => {
         expect(details).not.toContain("AKID_IN_URL");
         expect(details).not.toContain("sig%3D");
         expect(details).toContain("oss-cn-hangzhou.aliyuncs.com");
+    });
+
+    it("redacts sensitive response headers as well as request headers", () => {
+        const headers = responseHeadersText({
+            "set-cookie": ["session=do-not-expose"],
+            "x-auth-token": ["token-value"],
+            "x-request-id": ["request-123"],
+        });
+        expect(headers).toContain("request-123");
+        expect(headers).not.toContain("do-not-expose");
+        expect(headers).not.toContain("token-value");
+        expect(responseHeadersText(null)).toBe("null");
+    });
+
+    it("redacts OSS, OBS and QBox authorization tokens and Huawei Access keys", () => {
+        expect(redact("Authorization: OBS AKIAEXAMPLE:Zm9vYmFy")).not.toContain("AKIAEXAMPLE");
+        expect(redact("Authorization: OSS AKEXAMPLE:c2lnbmF0dXJl")).not.toContain("AKEXAMPLE");
+        expect(redact("Authorization: QBox AKQINIU:c2ln")).not.toContain("AKQINIU");
+        expect(redact("SDK-HMAC-SHA256 Access=HUAWEIAK, SignedHeaders=host, Signature=abcd"))
+            .not.toContain("HUAWEIAK");
+        // 普通正文里的方案名不能被当成凭据抹掉
+        expect(redact("Unexpected OSS response: missing BucketStat")).toContain("Unexpected OSS response");
+        expect(redact("Unexpected OBS response: missing root")).toContain("Unexpected OBS response");
+    });
+
+    it("summarizes errors without leaking credentials", () => {
+        const error = new Error('request failed: {"secretKey":"do-not-expose"}');
+        expect(errorSummary(error)).not.toContain("do-not-expose");
+        expect(errorSummary("Authorization: Bearer abc.def.ghi")).not.toContain("abc.def.ghi");
     });
 });

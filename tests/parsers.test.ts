@@ -19,6 +19,7 @@ describe("provider parsers", () => {
   <StandardStorage>430</StandardStorage>
   <StandardObjectCount>66</StandardObjectCount>
   <InfrequentAccessStorage>2359296</InfrequentAccessStorage>
+  <InfrequentAccessRealStorage>360</InfrequentAccessRealStorage>
   <InfrequentAccessObjectCount>54</InfrequentAccessObjectCount>
   <DeepColdArchiveStorage>10</DeepColdArchiveStorage>
   <DeepColdArchiveObjectCount>1</DeepColdArchiveObjectCount>
@@ -28,6 +29,8 @@ describe("provider parsers", () => {
         expect(usage.multipartCount).toBe(40);
         expect(usage.dataTime).toBe(1643341269000);
         expect(usage.storageClasses?.map((item) => item.key)).toEqual(["standard", "ia", "deepArchive"]);
+        // 分类明细取实际存储量：计费口径（2359296）会因 64 KB 最小计费单位与总量对不上
+        expect(usage.storageClasses?.[1].storageBytes).toBe(360);
     });
 
     it("parses OBS GetBucketStorageInfo", () => {
@@ -43,16 +46,28 @@ describe("provider parsers", () => {
         expect(usage.storageClasses).toHaveLength(1);
     });
 
-    it("parses TOS BucketStat", () => {
-        const usage = parseTosStat(`<?xml version="1.0" encoding="UTF-8"?>
-<BucketStat>
-  <TotalStorageStat><Storage>43087225856</Storage><ChargeStorage>43087225856</ChargeStorage><ObjectCount>10553469</ObjectCount></TotalStorageStat>
-  <StandardStorageStat><Storage>43087225856</Storage><ChargeStorage>43087225856</ChargeStorage><ObjectCount>10553469</ObjectCount></StandardStorageStat>
-  <IAStorageStat><Storage>0</Storage><ChargeStorage>0</ChargeStorage><ObjectCount>0</ObjectCount></IAStorageStat>
-</BucketStat>`);
+    it("parses the TOS JSON bucket stat", () => {
+        // 官方 Go SDK 的 GetBucketStat 走 json.Unmarshal，响应没有根节点包装
+        const usage = parseTosStat(JSON.stringify({
+            TotalStorageStat: {Storage: "43087225856", ChargeStorage: "43087225856", ObjectCount: 10553469},
+            StandardStorageStat: {Storage: "43087225856", ObjectCount: 10553469},
+            IAStorageStat: {Storage: "0", ObjectCount: 0},
+            ArchiveFrStorageStat: {Storage: "2048", ObjectCount: 2},
+            IntelligentTieringStorageStats: {
+                HighFreqStorageStat: {Storage: "1024", ObjectCount: 1},
+                LowFreqStorageStat: {Storage: "512", ObjectCount: 1},
+            },
+        }));
         expect(usage.storageBytes).toBe(43087225856);
         expect(usage.objectCount).toBe(10553469);
-        expect(usage.storageClasses?.[0].name).toBe("STANDARD");
+        expect(usage.storageClasses?.map((item) => item.name))
+            .toEqual(["STANDARD", "ARCHIVE_FR", "INTELLIGENT_TIERING_FA", "INTELLIGENT_TIERING_IA"]);
+        expect(usage.storageClasses?.[1]).toMatchObject({storageBytes: 2048, objectCount: 2});
+    });
+
+    it("rejects a TOS response that is not JSON", () => {
+        expect(() => parseTosStat("<BucketStat><Storage>1</Storage></BucketStat>"))
+            .toThrow(/not JSON/);
     });
 
     it("takes the latest COS datapoint", () => {
@@ -72,6 +87,15 @@ describe("provider parsers", () => {
         expect(latestQiniuValue('{"times":[1767225600,1767229200],"datas":[100,200]}'))
             .toEqual({timestamp: 1767229200, value: 200});
         expect(latestQiniuValue('{"times":[],"datas":[]}')).toEqual({});
+    });
+
+    it("keeps the legacy bucketsSizes fallback working", () => {
+        // 旧版 datausageinfo 只给桶名到字节数的映射，没有 bucketsUsageInfo
+        const usage = parseMinioUsage(JSON.stringify({bucketsSizes: {photos: 1234}}), "photos");
+        expect(usage.storageBytes).toBe(1234);
+        expect(usage.objectCount).toBeUndefined();
+        expect(() => parseMinioUsage(JSON.stringify({bucketsSizes: {other: 1}}), "photos"))
+            .toThrow(/no usage for bucket photos/);
     });
 
     it("parses MinIO datausageinfo", () => {
@@ -128,6 +152,30 @@ describe("provider parsers", () => {
         expect(usage.trafficInBytes).toBe(11);
         expect(usage.trafficOutBytes).toBe(22);
         expect(usage.dataTime).toBe(Date.parse("2026-11-15T00:00:00Z"));
+    });
+
+    it("leaves R2 storage undefined when the snapshot has no sizes", () => {
+        const usage = parseR2Usage({
+            data: {
+                viewer: {
+                    accounts: [{
+                        r2StorageAdaptiveGroups: [{
+                            max: {objectCount: 0, payloadSize: null, metadataSize: null},
+                            dimensions: {datetime: "not-a-date"},
+                        }],
+                    }],
+                },
+            },
+        });
+        expect(usage.storageBytes).toBeUndefined();
+        expect(usage.objectCount).toBe(0);
+        expect(usage.dataTime).toBeUndefined();
+        // 只有一个字段有值时按 0 补另一半，仍然是「有值」
+        expect(parseR2Usage({
+            data: {viewer: {accounts: [{
+                r2StorageAdaptiveGroups: [{max: {payloadSize: 100}, dimensions: {datetime: "2026-11-15T00:00:00Z"}}],
+            }]}},
+        }).storageBytes).toBe(100);
     });
 
     it("parses CloudMonitor Datapoints JSON string", () => {
@@ -197,6 +245,10 @@ describe("provider parsers", () => {
         expect(metrics.trafficOutBytes).toBe(2048);
         expect(metrics.requestCount).toBe(7);
         expect(parseMinioMetrics(body, "missing")).toEqual({});
+        // 没有 bucket 标签的样本属于集群级汇总：只允许 v3 单桶端点把它算进本桶
+        const cluster = 'minio_bucket_traffic_received_bytes 4096\nminio_bucket_requests_total{api="Put"} 9';
+        expect(parseMinioMetrics(cluster, "photos")).toEqual({});
+        expect(parseMinioMetrics(cluster, "photos", true).trafficInBytes).toBe(4096);
     });
 
     it("parses AWS request metric series and FilterId dimensions", () => {

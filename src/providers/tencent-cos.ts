@@ -5,11 +5,12 @@
  * 维度是 appid + bucket，Region 固定填 ap-guangzhou（与桶实际地域无关）。
  * 存储类指标单位是 MB，这里统一换算成字节；对象数和请求数是「个/次」。
  */
+import {mapLimit} from "../async";
 import {signTc3} from "../sign/tencent-tc3";
-import {diagnosticSection, requestSection} from "../diagnostics";
+import {diagnosticSection, requestSection, responseBodyText} from "../diagnostics";
 import {asNumber, jsonPath} from "../xml";
 import {cosAppId, providerError, requireAccessKey, requireSecretKey} from "./helpers";
-import {MONITOR_WINDOW_MS, sumDefined} from "./monitoring";
+import {MONITOR_WINDOW_MS, sumDefined, withMetrics} from "./monitoring";
 import type {ProviderDefinition, StorageClassUsage} from "./types";
 import {ProviderError} from "./types";
 
@@ -96,14 +97,27 @@ export function summedCosPoint(payload: unknown): MetricPoint {
     return total === undefined ? {} : {value: total, timestamp: timestamp > 0 ? timestamp : undefined};
 }
 
-function errorOf(payload: unknown): string {
+/** 200 响应体里的业务错误：错误码要单独带出去，认证类失败靠它归类。 */
+function errorOf(payload: unknown): {code: string; message: string} {
     const error = jsonPath(payload, "Response", "Error");
     if (!error || typeof error !== "object") {
-        return "";
+        return {code: "", message: ""};
     }
     const code = jsonPath(error, "Code");
     const message = jsonPath(error, "Message");
-    return [code, message].filter((item) => typeof item === "string" && item !== "").join(": ");
+    return {
+        code: typeof code === "string" ? code.trim() : "",
+        message: [code, message].filter((item) => typeof item === "string" && item !== "").join(": "),
+    };
+}
+
+/**
+ * 云监控的 bucket 维度是带 APPID 的完整桶名（文档示例 `examplebucket-1250000000`）。
+ *
+ * 用户只填裸桶名时按 APPID 补后缀：否则维度匹配不到任何实例，容量和流量全为空。
+ */
+function bucketDimension(bucket: string, appId: string): string {
+    return bucket.endsWith(`-${appId}`) ? bucket : `${bucket}-${appId}`;
 }
 
 /** 腾讯云文档与 SDK 都使用不带毫秒的 RFC3339 时间（`2020-11-24T15:15:50+08:00`）。 */
@@ -127,7 +141,7 @@ async function getMetric(
         Instances: [{
             Dimensions: [
                 {Name: "appid", Value: appId},
-                {Name: "bucket", Value: bucket},
+                {Name: "bucket", Value: bucketDimension(bucket, appId)},
             ],
         }],
         StartTime: isoSecond(start),
@@ -164,43 +178,19 @@ async function getMetric(
         error.message += diagnosticSection("Operation", context());
         throw error;
     }
-    const message = errorOf(parsed);
-    if (message !== "") {
-        throw new ProviderError(`${message}${diagnosticSection("Response body", response.body || "(empty response body)")}` +
+    const business = errorOf(parsed);
+    if (business.message !== "") {
+        throw new ProviderError(`${business.message}${diagnosticSection("Response body", responseBodyText(response.body))}` +
             requestSection(response) +
-            diagnosticSection("Operation", context()));
+            diagnosticSection("Operation", context()), {code: business.code});
     }
     return options.sum === true ? summedCosPoint(parsed) : latestPoint(parsed);
 }
 
-/** 并发上限：腾讯云默认 50 次/秒，这里压到 4 条并发，避免一个桶就把额度打满。 */
-async function mapLimit<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
-    const results: R[] = new Array(items.length);
-    let next = 0;
-    const workers = Array.from({length: Math.min(limit, items.length)}, async () => {
-        while (next < items.length) {
-            const index = next++;
-            results[index] = await run(items[index]);
-        }
-    });
-    await Promise.all(workers);
-    return results;
-}
-
 export const tencentCos: ProviderDefinition = {
     id: "tencentCos",
-    labelKey: "providerTencentCos",
-    endpointRequired: false,
-    regionRequired: true,
-    accountIdRequired: false,
-    accessKeyLabelKey: "providerTencentCosToken",
-    secretKeyRequired: true,
-    bucketHintKey: "sourceBucketPlaceholder",
     async query(ctx) {
-        // 地域只影响桶的归属，云监控请求固定走广州；这里校验地域只是防止用户漏填桶名后缀
-        if (ctx.source.region.trim() === "" && !/-\d+$/.test(ctx.bucket)) {
-            throw new ProviderError("Region is required");
-        }
+        // 云监控请求固定走广州，地域对查询没有影响：桶归属与 APPID 都从桶名或 Account ID 里取
         const appId = cosAppId(ctx.source, ctx.bucket);
         const storagePoints = await mapLimit(STORAGE_SPECS, 4, (spec) => getMetric(ctx, spec.metric, ctx.bucket, appId));
         const objectPoints = await mapLimit(
@@ -208,19 +198,31 @@ export const tencentCos: ProviderDefinition = {
             4,
             (spec) => getMetric(ctx, spec.objectMetric ?? "", ctx.bucket, appId),
         );
-        const [multipart, inbound, outbound, requests] = await mapLimit(
-            [
-                {metric: "StdMultipartNumber", sum: false},
-                {metric: "InboundTraffic", sum: true},
-                {metric: "InternetTraffic", sum: true},
-                {metric: "TotalRequests", sum: true},
-            ],
-            4,
-            (spec) => getMetric(ctx, spec.metric, ctx.bucket, appId, {
-                sum: spec.sum,
-                windowMs: spec.sum ? MONITOR_WINDOW_MS : undefined,
-            }),
-        );
+        const errors: string[] = [];
+        // 云监控与桶本身是两套权限：流量/请求数查不到时只记 errors，
+        // 不能让整张卡片变成错误——否则没有监控权限的用户连容量都看不到。
+        const [multipart, traffic] = await Promise.all([
+            getMetric(ctx, "StdMultipartNumber", ctx.bucket, appId),
+            withMetrics(async () => {
+                const [inbound, outbound, requests] = await mapLimit(
+                    [
+                        {metric: "InboundTraffic"},
+                        {metric: "InternetTraffic"},
+                        {metric: "TotalRequests"},
+                    ],
+                    3,
+                    (spec) => getMetric(ctx, spec.metric, ctx.bucket, appId, {
+                        sum: true,
+                        windowMs: MONITOR_WINDOW_MS,
+                    }),
+                );
+                return {
+                    trafficInBytes: inbound.value,
+                    trafficOutBytes: outbound.value,
+                    requestCount: requests.value,
+                };
+            }, errors),
+        ]);
 
         const classes: StorageClassUsage[] = [];
         let storageBytes = 0;
@@ -252,19 +254,19 @@ export const tencentCos: ProviderDefinition = {
             }
         });
         const notes = ["noteCosDelay"];
-        if (inbound.value !== undefined || outbound.value !== undefined || requests.value !== undefined) {
+        if (traffic.trafficInBytes !== undefined || traffic.trafficOutBytes !== undefined
+            || traffic.requestCount !== undefined) {
             notes.push("noteMetricsWindow");
         }
         return {
             storageBytes: hasStorage ? storageBytes : undefined,
             objectCount: hasObjects ? objectCount : undefined,
             multipartCount: multipart.value,
-            trafficInBytes: inbound.value,
-            trafficOutBytes: outbound.value,
-            requestCount: requests.value,
             storageClasses: classes,
             dataTime: dataTime > 0 ? dataTime : undefined,
             notes,
+            errors,
+            ...traffic,
         };
     },
 };
