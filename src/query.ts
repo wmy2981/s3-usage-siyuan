@@ -4,7 +4,7 @@
  * 这里负责三件事：解析「使用思源 S3 同步配置」的实时凭据、选适配器、把底层错误
  * 归类成界面能说清楚的几类（网络没送达 / 认证失败 / 服务商报错 / 配置不全）。
  */
-import {detectProvider, MIN_TEST_TIMEOUT_SECONDS, readSyncS3Config, type DataSource} from "./config";
+import {MIN_TEST_TIMEOUT_SECONDS, siyuanRuntimeSource, type DataSource} from "./config";
 import {ForwardError, forward} from "./net";
 import {diagnosticSection, detailedErrorText} from "./diagnostics";
 import {providerFor} from "./providers/registry";
@@ -28,21 +28,13 @@ function effectiveSource(source: DataSource, bucket: string, timeoutSeconds: num
     if (!source.useSyncConfig) {
         return source;
     }
-    const config = readSyncS3Config();
-    if (!config) {
+    // 思源导入那一条必须和界面渲染走同一套归一化：补协议头、猜服务商、从 Endpoint 推导地域。
+    // 这里若自己再拼一遍，会把已补全的 Endpoint 换回思源里那种不带协议头的裸 host。
+    const resolved = siyuanRuntimeSource(source.name);
+    if (resolved.buckets.length === 0) {
         throw new QueryError("config", withQueryContext(new Error("SiYuan has no usable S3 sync configuration"), source, bucket, timeoutSeconds));
     }
-    const provider = detectProvider(config.endpoint);
-    return {
-        ...source,
-        provider,
-        endpoint: config.endpoint,
-        region: config.region || source.region,
-        accessKey: config.accessKey,
-        secretKey: config.secretKey,
-        credentialsError: false,
-        credentialsErrorReason: "",
-    };
+    return resolved;
 }
 
 function sourceContext(source: DataSource, bucket: string, timeoutSeconds: number): string {
