@@ -1,6 +1,7 @@
 import {describe, expect, it} from "vitest";
 import {createHash, createHmac} from "node:crypto";
 import type {DataSource} from "../src/config";
+import {qiniuKodo} from "../src/providers/qiniu-kodo";
 import {tencentCos} from "../src/providers/tencent-cos";
 import type {ForwardRequest} from "../src/providers/types";
 
@@ -82,3 +83,44 @@ function expectedTc3Authorization(request: ForwardRequest): string {
     return `TC3-HMAC-SHA256 Credential=AKIDEXAMPLE/${date}/monitor/tc3_request, ` +
         `SignedHeaders=content-type;host, Signature=${signature}`;
 }
+
+describe("Qiniu Kodo endpoint handling", () => {
+    function qiniuSource(endpoint: string): DataSource {
+        return {
+            id: "qiniu", name: "qiniu", provider: "qiniuKodo", buckets: ["photos"],
+            endpoint, region: "", accountId: "", useSyncConfig: false,
+            accessKey: "QINIU_AK", secretKey: "QINIU_SK", credentialsError: false, credentialsErrorReason: "",
+        };
+    }
+
+    /** 数据统计接口（space/count）与流量接口（blob_io/rs_put）用同一份载荷喂一次查询。 */
+    async function run(endpoint: string) {
+        const urls: string[] = [];
+        const usage = await qiniuKodo.query({
+            source: qiniuSource(endpoint), bucket: "photos", timeoutMs: 5000,
+            request: async (request) => {
+                urls.push(request.url);
+                expect(request.headers.Authorization).toContain("QINIU_AK:");
+                return {status: 200, body: JSON.stringify({times: [1700000000], datas: [1024]}), headers: null};
+            },
+        });
+        return {urls, usage};
+    }
+
+    it("turns a bare host typed into the form into a usable base URL", async () => {
+        const {urls, usage} = await run("api.qiniuapi.com/");
+        expect(urls).not.toHaveLength(0);
+        for (const url of urls) {
+            expect(url.startsWith("https://api.qiniuapi.com/v6/")).toBe(true);
+        }
+        expect(usage.storageBytes).toBe(4 * 1024);
+        expect(usage.objectCount).toBe(4 * 1024);
+    });
+
+    it("falls back to the public endpoint when the field is empty", async () => {
+        const {urls} = await run("  ");
+        for (const url of urls) {
+            expect(url.startsWith("https://api.qiniuapi.com/v6/")).toBe(true);
+        }
+    });
+});

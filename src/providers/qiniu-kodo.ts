@@ -8,7 +8,7 @@
 import {mapLimit} from "../async";
 import {hmac, toBase64, utf8} from "../sign/util";
 import {asNumber, jsonPath} from "../xml";
-import {requireAccessKey, requireSecretKey, providerError} from "./helpers";
+import {requireAccessKey, requireEndpoint, requireSecretKey, providerError} from "./helpers";
 import {MONITOR_WINDOW_MS, sumDefined, withMetrics} from "./monitoring";
 import type {ProviderDefinition, StorageClassUsage} from "./types";
 import {ProviderError} from "./types";
@@ -101,7 +101,9 @@ function latestValue(body: string): StatValue {
 
 function endpointFor(source: Parameters<ProviderDefinition["query"]>[0]["source"]): string {
     if (source.endpoint.trim() !== "") {
-        return source.endpoint.replace(/\/+$/, "");
+        // 自定义 Endpoint 走与其他服务商一致的归一化：表单允许只填裸 host，
+        // 原样拼进 URL 会让 new URL() 直接抛 TypeError
+        return requireEndpoint(source);
     }
     if (source.region === "ap-southeast-2") {
         return "https://api-ap-southeast-2.qiniuapi.com";
