@@ -105,6 +105,7 @@
   "providerAwsS3Secret": "Secret Access Key",
   "storageClassStandard": "Standard",
   "storageClassIa": "Infrequent access",
+  "storageClassArchiveFr": "Archive flash-back",
   "storageClassArchive": "Archive",
   "storageClassColdArchive": "Cold archive",
   "storageClassDeepArchive": "Deep archive",

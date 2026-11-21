@@ -43,16 +43,28 @@ describe("provider parsers", () => {
         expect(usage.storageClasses).toHaveLength(1);
     });
 
-    it("parses TOS BucketStat", () => {
-        const usage = parseTosStat(`<?xml version="1.0" encoding="UTF-8"?>
-<BucketStat>
-  <TotalStorageStat><Storage>43087225856</Storage><ChargeStorage>43087225856</ChargeStorage><ObjectCount>10553469</ObjectCount></TotalStorageStat>
-  <StandardStorageStat><Storage>43087225856</Storage><ChargeStorage>43087225856</ChargeStorage><ObjectCount>10553469</ObjectCount></StandardStorageStat>
-  <IAStorageStat><Storage>0</Storage><ChargeStorage>0</ChargeStorage><ObjectCount>0</ObjectCount></IAStorageStat>
-</BucketStat>`);
+    it("parses the TOS JSON bucket stat", () => {
+        // 官方 Go SDK 的 GetBucketStat 走 json.Unmarshal，响应没有根节点包装
+        const usage = parseTosStat(JSON.stringify({
+            TotalStorageStat: {Storage: "43087225856", ChargeStorage: "43087225856", ObjectCount: 10553469},
+            StandardStorageStat: {Storage: "43087225856", ObjectCount: 10553469},
+            IAStorageStat: {Storage: "0", ObjectCount: 0},
+            ArchiveFrStorageStat: {Storage: "2048", ObjectCount: 2},
+            IntelligentTieringStorageStats: {
+                HighFreqStorageStat: {Storage: "1024", ObjectCount: 1},
+                LowFreqStorageStat: {Storage: "512", ObjectCount: 1},
+            },
+        }));
         expect(usage.storageBytes).toBe(43087225856);
         expect(usage.objectCount).toBe(10553469);
-        expect(usage.storageClasses?.[0].name).toBe("STANDARD");
+        expect(usage.storageClasses?.map((item) => item.name))
+            .toEqual(["STANDARD", "ARCHIVE_FR", "INTELLIGENT_TIERING_FA", "INTELLIGENT_TIERING_IA"]);
+        expect(usage.storageClasses?.[1]).toMatchObject({storageBytes: 2048, objectCount: 2});
+    });
+
+    it("rejects a TOS response that is not JSON", () => {
+        expect(() => parseTosStat("<BucketStat><Storage>1</Storage></BucketStat>"))
+            .toThrow(/not JSON/);
     });
 
     it("takes the latest COS datapoint", () => {

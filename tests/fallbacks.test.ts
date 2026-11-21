@@ -116,7 +116,7 @@ describe("diagnostics do not change provider control flow", () => {
                 if (!request.body) {
                     return {
                         status: 200,
-                        body: "<BucketStat><TotalStorageStat><Storage>10</Storage><ObjectCount>1</ObjectCount></TotalStorageStat></BucketStat>",
+                        body: JSON.stringify({TotalStorageStat: {Storage: "10", ObjectCount: 1}}),
                         headers: null,
                     };
                 }

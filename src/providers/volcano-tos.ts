@@ -9,7 +9,7 @@ import {mapLimit} from "../async";
 import {detailedErrorText, requestSection} from "../diagnostics";
 import {signAwsV4} from "../sign/aws-v4";
 import {virtualHostBucketUrl} from "../sign/oss-v1";
-import {asNumber, jsonPath, numberAt, parseXml, recordAt} from "../xml";
+import {asNumber, jsonPath} from "../xml";
 import {requireAccessKey, requireEndpoint, requireRegion, requireSecretKey, providerError} from "./helpers";
 import {MONITOR_WINDOW_MS, sumDefined, withMetrics} from "./monitoring";
 import type {BucketUsage, ProviderDefinition, StorageClassUsage} from "./types";
@@ -32,44 +32,55 @@ const QPS_METRICS = [
     "DeleteObjectsQps",
 ];
 
+/** 取一个存储统计节点；TOS 的 `Storage` 是字符串，统一走 asNumber。 */
+function statEntry(value: unknown): {storageBytes?: number; objectCount?: number} | undefined {
+    if (!value || typeof value !== "object") {
+        return undefined;
+    }
+    return {
+        storageBytes: asNumber(jsonPath(value, "Storage")),
+        objectCount: asNumber(jsonPath(value, "ObjectCount")),
+    };
+}
+
+/**
+ * `GET /?stat` 返回的是 **JSON**（没有根节点包装），字段与官方 Go SDK 的
+ * `GetBucketStatOutput` 一一对应：Storage 是字符串，对象数是数字。
+ */
 function parseTosStat(body: string): BucketUsage {
-    const root = recordAt(parseXml(body), "BucketStat");
-    if (!root) {
-        throw new ProviderError(`Unexpected TOS response: missing BucketStat\nResponse body:\n${body}`);
+    let payload: unknown;
+    try {
+        payload = JSON.parse(body);
+    } catch {
+        throw new ProviderError(`Unexpected TOS response: not JSON\nResponse body:\n${body}`);
+    }
+    if (!payload || typeof payload !== "object") {
+        throw new ProviderError(`Unexpected TOS response: empty body\nResponse body:\n${body}`);
     }
     const classes: StorageClassUsage[] = [];
-    const addClass = (key: string, name: string, nodeName: string) => {
-        const node = recordAt(root, nodeName);
-        const storageBytes = numberAt(node, "Storage");
-        const objectCount = numberAt(node, "ObjectCount");
-        if ((storageBytes ?? 0) > 0 || (objectCount ?? 0) > 0) {
-            classes.push({key, name, storageBytes, objectCount});
+    const addClass = (key: string, name: string, ...nodePath: string[]) => {
+        const entry = statEntry(jsonPath(payload, ...nodePath));
+        if (!entry) {
+            return;
+        }
+        if ((entry.storageBytes ?? 0) > 0 || (entry.objectCount ?? 0) > 0) {
+            classes.push({key, name, ...entry});
         }
     };
     addClass("standard", "STANDARD", "StandardStorageStat");
     addClass("ia", "IA", "IAStorageStat");
+    addClass("archiveFr", "ARCHIVE_FR", "ArchiveFrStorageStat");
     addClass("archive", "ARCHIVE", "ArchiveStorageStat");
     addClass("coldArchive", "COLD_ARCHIVE", "ColdArchiveStorageStat");
     addClass("deepArchive", "DEEP_COLD_ARCHIVE", "DeepColdArchiveStorageStat");
-    const intelligent = recordAt(root, "IntelligentTieringStorageStats");
-    if (intelligent) {
-        const addIntelligent = (key: string, name: string, nodeName: string) => {
-            const node = recordAt(intelligent, nodeName);
-            const storageBytes = numberAt(node, "Storage");
-            const objectCount = numberAt(node, "ObjectCount");
-            if ((storageBytes ?? 0) > 0 || (objectCount ?? 0) > 0) {
-                classes.push({key, name, storageBytes, objectCount});
-            }
-        };
-        addIntelligent("intelligentFa", "INTELLIGENT_TIERING_FA", "HighFreqStorageStat");
-        addIntelligent("intelligentIa", "INTELLIGENT_TIERING_IA", "LowFreqStorageStat");
-        addIntelligent("intelligentArchive", "INTELLIGENT_TIERING_ARCHIVE", "ArchiveFrStorageStat");
-    }
-    const total = recordAt(root, "TotalStorageStat");
+    addClass("intelligentFa", "INTELLIGENT_TIERING_FA", "IntelligentTieringStorageStats", "HighFreqStorageStat");
+    addClass("intelligentIa", "INTELLIGENT_TIERING_IA", "IntelligentTieringStorageStats", "LowFreqStorageStat");
+    addClass("intelligentArchive", "INTELLIGENT_TIERING_ARCHIVE", "IntelligentTieringStorageStats", "ArchiveFrStorageStat");
+    const total = statEntry(jsonPath(payload, "TotalStorageStat"));
     return {
-        storageBytes: numberAt(total, "Storage") ??
+        storageBytes: total?.storageBytes ??
             classes.reduce((sum, item) => sum + (item.storageBytes ?? 0), 0),
-        objectCount: numberAt(total, "ObjectCount") ??
+        objectCount: total?.objectCount ??
             classes.reduce((sum, item) => sum + (item.objectCount ?? 0), 0),
         storageClasses: classes,
         notes: ["noteTosDelay"],

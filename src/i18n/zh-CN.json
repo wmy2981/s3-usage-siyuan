@@ -105,6 +105,7 @@
   "providerAwsS3Secret": "Secret Access Key",
   "storageClassStandard": "标准存储",
   "storageClassIa": "低频访问",
+  "storageClassArchiveFr": "归档闪回",
   "storageClassArchive": "归档存储",
   "storageClassColdArchive": "冷归档",
   "storageClassDeepArchive": "深度归档",
