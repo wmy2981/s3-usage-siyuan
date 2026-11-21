@@ -48,18 +48,19 @@ function parseMinioUsage(body: string, bucket: string): BucketUsage {
         throw new ProviderError(`Unexpected MinIO response: not JSON\nResponse body:\n${body}`);
     }
     const entry = firstBucketEntry(payload, bucket);
-    if (!entry) {
+    // 旧版本只返回 `bucketsSizes`（桶名 → 字节数）：这条兜底要留到 entry 为空时才生效
+    const sizeFallback = asNumber(jsonPath(payload, "bucketsSizes", bucket));
+    if (!entry && sizeFallback === undefined) {
         throw new ProviderError(`MinIO returned no usage for bucket ${bucket}\nResponse body:\n${body}`);
     }
-    const sizeFallback = asNumber(jsonPath(payload, "bucketsSizes", bucket));
     const lastUpdate = jsonPath(payload, "lastUpdate");
     // RFC3339Nano 带 9 位小数，Date.parse 只稳定支持毫秒，先截到 3 位
     const dataTime = typeof lastUpdate === "string"
         ? Date.parse(lastUpdate.replace(/(\.\d{3})\d+/, "$1"))
         : undefined;
     return {
-        storageBytes: entry.size ?? sizeFallback,
-        objectCount: entry.objectsCount,
+        storageBytes: entry?.size ?? sizeFallback,
+        objectCount: entry?.objectsCount,
         dataTime: Number.isFinite(dataTime) ? dataTime : undefined,
         notes: ["noteMinioRealtime"],
     };
@@ -127,10 +128,11 @@ export function parsePrometheusText(body: string): PrometheusSample[] {
 }
 
 // v2 端点用 minio_bucket_*，v3 端点改成 minio_bucket_api_*；两套名字都认。
-// 请求数优先取 requests_total，个别版本只有直方图的 _count（观测次数即请求数）。
+// 请求数只有 *_requests_total / *_api_total 两个真指标：ttfb 是 distribution，
+// 它的分桶样本不能直接相加，凑进去只会把请求数算错。
 const TRAFFIC_IN = ["minio_bucket_traffic_received_bytes", "minio_bucket_api_traffic_received_bytes"];
 const TRAFFIC_OUT = ["minio_bucket_traffic_sent_bytes", "minio_bucket_api_traffic_sent_bytes"];
-const REQUESTS = ["minio_bucket_requests_total", "minio_bucket_requests_ttfb_seconds_count", "minio_bucket_api_total"];
+const REQUESTS = ["minio_bucket_requests_total", "minio_bucket_api_total"];
 
 /**
  * 桶级流量与请求数。

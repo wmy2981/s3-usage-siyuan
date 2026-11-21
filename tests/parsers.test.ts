@@ -86,6 +86,15 @@ describe("provider parsers", () => {
         expect(latestQiniuValue('{"times":[],"datas":[]}')).toEqual({});
     });
 
+    it("keeps the legacy bucketsSizes fallback working", () => {
+        // 旧版 datausageinfo 只给桶名到字节数的映射，没有 bucketsUsageInfo
+        const usage = parseMinioUsage(JSON.stringify({bucketsSizes: {photos: 1234}}), "photos");
+        expect(usage.storageBytes).toBe(1234);
+        expect(usage.objectCount).toBeUndefined();
+        expect(() => parseMinioUsage(JSON.stringify({bucketsSizes: {other: 1}}), "photos"))
+            .toThrow(/no usage for bucket photos/);
+    });
+
     it("parses MinIO datausageinfo", () => {
         const usage = parseMinioUsage(JSON.stringify({
             lastUpdate: "2026-06-18T09:23:54.518950731Z",
