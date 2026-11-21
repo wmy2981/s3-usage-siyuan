@@ -69,9 +69,16 @@ describe("error diagnostics", () => {
         const responseBody = JSON.stringify({Response: {Error: {
             Code: "AuthFailure.UnauthorizedOperation", Message: "no monitor permission",
         }, RequestId: "cos-request-id"}});
+        // 只让 StdStorage 失败：存储类指标是并发查询的，让所有请求都失败会由最先返回的那个决定报错
         await expect(tencentCos.query({
             source, bucket: "photos-1250000000", timeoutMs: 5000,
-            request: async () => ({status: 403, body: responseBody, headers: {"x-request-id": ["cos-request-id"]}}),
+            request: async (request) => {
+                const metric = (JSON.parse(request.body ?? "{}") as {MetricName: string}).MetricName;
+                if (metric !== "StdStorage") {
+                    return {status: 200, body: JSON.stringify({Response: {DataPoints: []}}), headers: null};
+                }
+                return {status: 403, body: responseBody, headers: {"x-request-id": ["cos-request-id"]}};
+            },
         })).rejects.toMatchObject({message: expect.stringMatching(/no monitor permission[\s\S]*cos-request-id[\s\S]*Metric: StdStorage/)});
     });
 
