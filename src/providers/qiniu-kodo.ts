@@ -68,6 +68,7 @@ export async function qiniuAuthorization(
     secretKey: string,
     signingString: string,
 ): Promise<string> {
+    // 只换成 URL-safe 字符表，保留 `=` 填充：七牛的管理签名要求原样透传 base64
     const signature = toBase64(await hmac("SHA-1", utf8(secretKey), signingString));
     const encoded = signature.replaceAll("+", "-").replaceAll("/", "_");
     return `Qiniu ${accessKey}:${encoded}`;

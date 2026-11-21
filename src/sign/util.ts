@@ -39,7 +39,7 @@ export function fromBase64(value: string): Uint8Array<ArrayBuffer> {
     return bytes;
 }
 
-/** 七牛要求 URL-safe base64 且去掉 `=` 填充。 */
+/** RFC 7515（JWS）的 base64url：URL-safe 且不带 `=` 填充；MinIO 的 Prometheus JWT 用它。 */
 export function toBase64UrlNoPadding(bytes: Uint8Array): string {
     return toBase64(bytes).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
