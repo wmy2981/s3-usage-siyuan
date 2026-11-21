@@ -143,6 +143,7 @@
   "noteVolcDerived": "Traffic and requests are integrated from average bandwidth/QPS and may differ from the console.",
   "noteMinioCumulative": "MinIO metrics are cumulative since the server started, not a 24-hour window.",
   "noteAwsRequestMetrics": "Enable CloudWatch request metrics on the bucket to see traffic and requests.",
+  "noteAwsMultiFilter": "Several CloudWatch request-metric filters exist for this bucket; the totals add all of them, so overlapping ranges may be counted twice.",
   "querySettings": "Query settings",
   "queryTimeout": "Query timeout (seconds)",
   "queryTimeoutHint": "5–300 seconds; increase it for slow provider monitoring APIs.",

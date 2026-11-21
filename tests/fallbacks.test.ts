@@ -9,6 +9,7 @@ import {aliyunOss} from "../src/providers/aliyun-oss";
 import {minio} from "../src/providers/minio";
 import {tencentCos} from "../src/providers/tencent-cos";
 import {volcanoTos} from "../src/providers/volcano-tos";
+import {awsS3} from "../src/providers/aws-s3";
 
 function source(provider: DataSource["provider"]): DataSource {
     return {
@@ -134,6 +135,59 @@ describe("diagnostics do not change provider control flow", () => {
         const summaries = (usage.errors ?? []).filter((message) => message === "noteMetricsFailed");
         expect(summaries).toHaveLength(1);
         expect(usage.errors?.some((message) => message.startsWith("Metric GetObjectQps:"))).toBe(true);
+    });
+
+    it("queries every AWS storage class and flags overlapping request filters", async () => {
+        const seen: string[] = [];
+        const usage = await awsS3.query({
+            source: source("awsS3"), bucket: "photos", timeoutMs: 5000,
+            request: async (request) => {
+                const params = new URLSearchParams(request.body ?? "");
+                const action = params.get("Action");
+                seen.push(action === "ListMetrics" ? "ListMetrics" : `${params.get("MetricName")}:${params.get("Dimensions.member.2.Value") ?? "none"}`);
+                if (action === "ListMetrics") {
+                    return {
+                        status: 200,
+                        body: "<ListMetricsResponse><ListMetricsResult><Metrics>" +
+                            "<member><Dimensions><member><Name>BucketName</Name><Value>photos</Value></member>" +
+                            "<member><Name>FilterId</Name><Value>EntireBucket</Value></member></Dimensions></member>" +
+                            "<member><Dimensions><member><Name>BucketName</Name><Value>photos</Value></member>" +
+                            "<member><Name>FilterId</Name><Value>prefix</Value></member></Dimensions></member>" +
+                            "</Metrics></ListMetricsResult></ListMetricsResponse>",
+                        headers: null,
+                    };
+                }
+                const metric = params.get("MetricName");
+                const storageType = params.get("Dimensions.member.2.Value");
+                if (metric === "BucketSizeBytes" && storageType === "GlacierStorage") {
+                    return {
+                        status: 400,
+                        body: "<Error><Code>InvalidParameterValue</Code><Message>unsupported</Message></Error>",
+                        headers: null,
+                    };
+                }
+                const value = metric === "BucketSizeBytes" ? (storageType === "StandardStorage" ? 100 : 0) : 7;
+                const field = params.get("Statistics.member.1");
+                return {
+                    status: 200,
+                    body: "<GetMetricStatisticsResponse><GetMetricStatisticsResult><Datapoints><member>" +
+                        `<Timestamp>2026-11-14T00:00:00Z</Timestamp><${field}>${value}</${field}>` +
+                        "</member></Datapoints></GetMetricStatisticsResult></GetMetricStatisticsResponse>",
+                    headers: null,
+                };
+            },
+        });
+        // 全部 12 个存储类都查过，对象数单独查一次，最后才是 ListMetrics
+        expect(seen.filter((entry) => entry.startsWith("BucketSizeBytes"))).toHaveLength(12);
+        expect(seen).toContain("NumberOfObjects:AllStorageTypes");
+        expect(seen.filter((entry) => entry === "ListMetrics")).toHaveLength(1);
+        // 请求指标按拿到 FilterId 之后的顺序查
+        expect(seen.indexOf("ListMetrics")).toBeLessThan(seen.indexOf("AllRequests:EntireBucket"));
+        expect(usage.storageBytes).toBe(100);
+        expect(usage.objectCount).toBe(7);
+        // 两条过滤器各返回 7，直接相加（并在 notes 里提示可能重复计数）
+        expect(usage.requestCount).toBe(14);
+        expect(usage.notes).toContain("noteAwsMultiFilter");
     });
 
     it("still falls back to the MinIO v4 usage endpoint after a 404", async () => {
