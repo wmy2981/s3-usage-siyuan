@@ -54,10 +54,15 @@ export function parseR2Usage(payload: unknown): BucketUsage {
     const storage = jsonPath(account, "r2StorageAdaptiveGroups");
     const storageRow = Array.isArray(storage) ? storage[0] : undefined;
     const max = jsonPath(storageRow, "max");
-    const storageBytes = (asNumber(jsonPath(max, "payloadSize")) ?? 0) +
-        (asNumber(jsonPath(max, "metadataSize")) ?? 0);
+    const payloadSize = asNumber(jsonPath(max, "payloadSize"));
+    const metadataSize = asNumber(jsonPath(max, "metadataSize"));
+    // 两个字段都没给时不能算成 0：那会把「还没有快照」画成真实的零字节
+    const storageBytes = storageRow && (payloadSize !== undefined || metadataSize !== undefined)
+        ? (payloadSize ?? 0) + (metadataSize ?? 0)
+        : undefined;
     const objectCount = asNumber(jsonPath(max, "objectCount"));
     const datetime = jsonPath(storageRow, "dimensions", "datetime");
+    const parsedTime = typeof datetime === "string" ? Date.parse(datetime) : Number.NaN;
 
     let requestCount = 0;
     let hasRequests = false;
@@ -92,12 +97,12 @@ export function parseR2Usage(payload: unknown): BucketUsage {
     }
 
     return {
-        storageBytes: storageRow ? storageBytes : undefined,
+        storageBytes,
         objectCount,
         requestCount: hasRequests ? requestCount : undefined,
         trafficInBytes: hasTraffic ? trafficInBytes : undefined,
         trafficOutBytes: hasTraffic ? trafficOutBytes : undefined,
-        dataTime: typeof datetime === "string" ? Date.parse(datetime) : undefined,
+        dataTime: Number.isFinite(parsedTime) ? parsedTime : undefined,
         notes: ["noteR2Range", "noteR2Daily"],
     };
 }

@@ -130,6 +130,30 @@ describe("provider parsers", () => {
         expect(usage.dataTime).toBe(Date.parse("2026-11-15T00:00:00Z"));
     });
 
+    it("leaves R2 storage undefined when the snapshot has no sizes", () => {
+        const usage = parseR2Usage({
+            data: {
+                viewer: {
+                    accounts: [{
+                        r2StorageAdaptiveGroups: [{
+                            max: {objectCount: 0, payloadSize: null, metadataSize: null},
+                            dimensions: {datetime: "not-a-date"},
+                        }],
+                    }],
+                },
+            },
+        });
+        expect(usage.storageBytes).toBeUndefined();
+        expect(usage.objectCount).toBe(0);
+        expect(usage.dataTime).toBeUndefined();
+        // 只有一个字段有值时按 0 补另一半，仍然是「有值」
+        expect(parseR2Usage({
+            data: {viewer: {accounts: [{
+                r2StorageAdaptiveGroups: [{max: {payloadSize: 100}, dimensions: {datetime: "2026-11-15T00:00:00Z"}}],
+            }]}},
+        }).storageBytes).toBe(100);
+    });
+
     it("parses CloudMonitor Datapoints JSON string", () => {
         const payload = {
             Success: true,
