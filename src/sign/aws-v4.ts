@@ -14,7 +14,6 @@ import {
     sha256Hex,
     toHex,
     uriEncode,
-    utf8,
 } from "./util";
 
 export interface AwsV4Options {
@@ -119,9 +118,4 @@ export function canonicalQueryOf(url: URL): string {
         }
     }
     return canonicalQuery(params);
-}
-
-/** 让调用方可以只用字符串签名而不关心 TextEncoder。 */
-export function bytesOf(value: string): Uint8Array<ArrayBuffer> {
-    return utf8(value);
 }

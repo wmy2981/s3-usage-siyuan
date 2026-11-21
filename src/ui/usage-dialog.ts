@@ -651,7 +651,7 @@ export class UsageDialog {
             importButton.addEventListener("click", () => void this.importSyncSource());
             actions.append(importButton);
         }
-        // 测试连接：导入按钮右侧，始终显示；逐个源查第一个桶
+        // 测试连接：导入按钮右侧，始终显示；每个源查它的全部桶
         const test = labeledIconButton("b3-button b3-button--outline", "iconLink",
             this.t(this.testing ? "sourceTesting" : "sourceTest"));
         test.disabled = this.testing || this.settings.sources.length === 0;
@@ -945,7 +945,7 @@ export class UsageDialog {
         return box;
     }
 
-    /** 测试全部源（含思源导入），每个源只查第一个桶。 */
+    /** 测试全部源（含思源导入），每个源查它的全部桶。 */
     private async testAllSources(): Promise<void> {
         if (this.testing || this.settings.sources.length === 0) {
             return;

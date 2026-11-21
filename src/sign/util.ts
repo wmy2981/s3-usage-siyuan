@@ -133,7 +133,7 @@ export function rfc1123(date: Date): string {
  * 阿里云 RPC 签名要求的 percentEncode。
  *
  * 官方规定在 `encodeURIComponent` 之后再把 `+` 换成 `%20`、`*` 换成 `%2A`、
- * `%7E` 还原成 `~`；`!'()` 保持不编码，这一点与 AWS 的 `uriEncode` 不同。
+ * `%7E` 还原成 `~`；`encodeURIComponent` 不编码的 `!()'` 也必须转义，这一点与 `uriEncode` 一致。
  */
 export function aliyunEncode(value: string): string {
     return encodeURIComponent(value)
@@ -151,13 +151,4 @@ export function randomNonce(): string {
         return api.randomUUID();
     }
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-/** 取 Object 上的字符串字段；不是字符串就当空串。 */
-export function stringField(value: unknown, key: string): string {
-    if (!value || typeof value !== "object") {
-        return "";
-    }
-    const field = (value as Record<string, unknown>)[key];
-    return typeof field === "string" ? field : "";
 }

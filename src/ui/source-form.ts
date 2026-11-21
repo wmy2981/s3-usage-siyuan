@@ -351,13 +351,6 @@ export class SourceForm {
             this.testLabel.textContent = this.t("sourceTest");
         }
     }
-
-    /** 更新外部传入的凭据错误状态（例如保存后重新载入）。 */
-    setCredentialsError(unreadable: boolean): void {
-        if (unreadable) {
-            this.showStatus(this.t("credentialUnreadable"), "error");
-        }
-    }
 }
 
 export function renderSourceList(

@@ -1,7 +1,7 @@
 /**
  * 阿里云 OSS：GetBucketStat（`GET /?stat`）。
  *
- * 返回桶总存储量、对象数、未完成分片与各存储类型明细；使用 OSS V1 签名。
+ * 返回桶总存储量、对象数、未完成分片与各存储类型明细；默认 OSS V4 签名，403 时回退 V1。
  * 官方明确统计非实时，延时可能超过 1 小时；低频/归档的 Storage 是计费口径。
  */
 import {regionFromEndpoint} from "../config";
