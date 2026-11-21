@@ -14,6 +14,25 @@ import {ProviderError} from "./providers/types";
 
 export type QueryErrorKind = "network" | "auth" | "provider" | "config";
 
+/** 认证类错误码；只有这些才归到「认证失败」，其余一律按服务商报错展示。 */
+const AUTH_ERROR_PATTERN = /AccessDenied|SignatureDoesNotMatch|InvalidAccessKey|InvalidSecretId|InvalidCredential|AuthFailure|Unauthorized|Forbidden/i;
+
+/**
+ * 判断一个服务商错误是不是认证类。
+ *
+ * 优先看结构化的状态码与错误码；部分服务商把错误码写在 200 响应体里，
+ * 这种情况只比对第一行摘要，绝不扫描整段诊断文本（里面的端口、时间戳都可能含 403）。
+ */
+function isAuthError(error: ProviderError): boolean {
+    if (error.status === 401 || error.status === 403) {
+        return true;
+    }
+    if (error.code !== "") {
+        return AUTH_ERROR_PATTERN.test(error.code);
+    }
+    return AUTH_ERROR_PATTERN.test(error.message.split("\n", 1)[0]);
+}
+
 export class QueryError extends Error {
     readonly kind: QueryErrorKind;
 
@@ -112,10 +131,7 @@ export async function queryBucket(
             throw new QueryError("network", context);
         }
         if (error instanceof ProviderError) {
-            if (/403|AccessDenied|SignatureDoesNotMatch|InvalidAccessKey|AuthFailure|Unauthorized|Forbidden/i.test(error.message)) {
-                throw new QueryError("auth", context);
-            }
-            throw new QueryError("provider", context);
+            throw new QueryError(isAuthError(error) ? "auth" : "provider", context);
         }
         throw new QueryError("provider", context);
     }

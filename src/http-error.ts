@@ -39,3 +39,27 @@ export function serverErrorText(status: number, body: string): string {
     }
     return `HTTP ${status}`;
 }
+
+/**
+ * 从错误体里取服务商错误码：XML 用 `<Code>`，JSON 用 `Code`/`code`。
+ *
+ * 只给归类用；展示仍然走 `serverErrorText`，两者都不含请求头。
+ */
+export function serverErrorCode(body: string): string {
+    const trimmed = body.trim();
+    if (trimmed === "") {
+        return "";
+    }
+    const json = parseJsonBody(trimmed);
+    if (json && typeof json === "object") {
+        const record = json as Record<string, unknown>;
+        const response = record.Response as Record<string, unknown> | undefined;
+        const error = (response?.Error ?? record.error ?? record) as Record<string, unknown>;
+        const code = error.Code ?? error.code ?? record.code;
+        return typeof code === "string" ? code.trim() : "";
+    }
+    if (trimmed.startsWith("<")) {
+        return /<Code>([^<]+)<\/Code>/.exec(trimmed)?.[1]?.trim() ?? "";
+    }
+    return "";
+}
