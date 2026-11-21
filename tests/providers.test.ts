@@ -1,6 +1,7 @@
 import {describe, expect, it} from "vitest";
 import {createHash, createHmac} from "node:crypto";
 import type {DataSource} from "../src/config";
+import {awsS3} from "../src/providers/aws-s3";
 import {cloudflareR2} from "../src/providers/cloudflare-r2";
 import {qiniuKodo} from "../src/providers/qiniu-kodo";
 import {volcanoTos} from "../src/providers/volcano-tos";
@@ -225,5 +226,43 @@ describe("Cloudflare R2 GraphQL requests", () => {
         expect(body.query).not.toContain("orderBy: [datetimeHour_ASC]");
         expect(Date.parse(body.variables.end) - Date.parse(body.variables.start))
             .toBe(30 * 24 * 60 * 60 * 1000);
+    });
+});
+
+describe("AWS S3 CloudWatch requests", () => {
+    it("uses the China partition endpoint and aligns the window to the period", async () => {
+        const requests: ForwardRequest[] = [];
+        await awsS3.query({
+            source: {
+                id: "aws", name: "aws", provider: "awsS3", buckets: ["photos"], endpoint: "",
+                region: "cn-north-1", accountId: "", useSyncConfig: false,
+                accessKey: "AKIDEXAMPLE", secretKey: "SECRETEXAMPLE",
+                credentialsError: false, credentialsErrorReason: "",
+            },
+            bucket: "photos", timeoutMs: 5000,
+            request: async (request) => {
+                requests.push(request);
+                const body = (request.body ?? "").includes("Action=ListMetrics")
+                    ? "<ListMetricsResponse><ListMetricsResult><Metrics/></ListMetricsResult></ListMetricsResponse>"
+                    : "<GetMetricStatisticsResponse><GetMetricStatisticsResult><Datapoints/></GetMetricStatisticsResult></GetMetricStatisticsResponse>";
+                return {status: 200, body, headers: null};
+            },
+        });
+        expect(requests.length).toBeGreaterThan(0);
+        for (const request of requests) {
+            expect(request.url).toBe("https://monitoring.cn-north-1.amazonaws.com.cn/");
+            const params = new URLSearchParams(request.body ?? "");
+            const period = Number(params.get("Period") ?? "0");
+            if (period === 0) {
+                // ListMetrics 没有时间窗，只校验域名
+                expect(params.get("Action")).toBe("ListMetrics");
+                continue;
+            }
+            for (const field of ["StartTime", "EndTime"]) {
+                const time = Date.parse(params.get(field) ?? "");
+                expect(Number.isFinite(time)).toBe(true);
+                expect(time % (period * 1000)).toBe(0);
+            }
+        }
     });
 });

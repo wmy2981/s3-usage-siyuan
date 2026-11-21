@@ -98,6 +98,18 @@ export function parseListMetricsFilters(body: string): string[] {
     return filters;
 }
 
+/** 中国区（cn-*）在 `.com.cn` 分区，其余区域用通用域名。 */
+function monitoringUrl(region: string): string {
+    const suffix = region.startsWith("cn-") ? "amazonaws.com.cn" : "amazonaws.com";
+    return `https://monitoring.${region}.${suffix}/`;
+}
+
+/** 时间窗对齐到统计周期：否则首尾两个桶是残缺的，24 小时合计会偏移一个周期。 */
+function alignToPeriod(date: Date, periodSeconds: number): Date {
+    const periodMs = periodSeconds * 1000;
+    return new Date(Math.floor(date.getTime() / periodMs) * periodMs);
+}
+
 interface MetricQuery {
     metricName: string;
     unit: "Bytes" | "Count";
@@ -114,8 +126,8 @@ async function requestMetric(
     query: MetricQuery,
 ): Promise<string> {
     const region = requireRegion(ctx.source);
-    const url = `https://monitoring.${region}.amazonaws.com/`;
-    const end = new Date();
+    const url = monitoringUrl(region);
+    const end = alignToPeriod(new Date(), query.periodSeconds);
     const start = new Date(end.getTime() - query.windowMs);
     const params = new URLSearchParams({
         Action: "GetMetricStatistics",
@@ -184,7 +196,7 @@ async function listRequestMetricFilters(
     bucket: string,
 ): Promise<string[]> {
     const region = requireRegion(ctx.source);
-    const url = `https://monitoring.${region}.amazonaws.com/`;
+    const url = monitoringUrl(region);
     const payload = new URLSearchParams({
         Action: "ListMetrics",
         Version: "2010-08-01",
