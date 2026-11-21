@@ -4,7 +4,7 @@
  * 这里负责三件事：解析「使用思源 S3 同步配置」的实时凭据、选适配器、把底层错误
  * 归类成界面能说清楚的几类（网络没送达 / 认证失败 / 服务商报错 / 配置不全）。
  */
-import {detectProvider, readSyncS3Config, type DataSource} from "./config";
+import {MIN_TEST_TIMEOUT_SECONDS, siyuanRuntimeSource, type DataSource} from "./config";
 import {ForwardError, forward} from "./net";
 import {diagnosticSection, detailedErrorText} from "./diagnostics";
 import {providerFor} from "./providers/registry";
@@ -13,6 +13,25 @@ import type {BucketUsage} from "./providers/types";
 import {ProviderError} from "./providers/types";
 
 export type QueryErrorKind = "network" | "auth" | "provider" | "config";
+
+/** 认证类错误码；只有这些才归到「认证失败」，其余一律按服务商报错展示。 */
+const AUTH_ERROR_PATTERN = /AccessDenied|SignatureDoesNotMatch|InvalidAccessKey|InvalidSecretId|InvalidCredential|AuthFailure|Unauthorized|Forbidden/i;
+
+/**
+ * 判断一个服务商错误是不是认证类。
+ *
+ * 优先看结构化的状态码与错误码；部分服务商把错误码写在 200 响应体里，
+ * 这种情况只比对第一行摘要，绝不扫描整段诊断文本（里面的端口、时间戳都可能含 403）。
+ */
+function isAuthError(error: ProviderError): boolean {
+    if (error.status === 401 || error.status === 403) {
+        return true;
+    }
+    if (error.code !== "") {
+        return AUTH_ERROR_PATTERN.test(error.code);
+    }
+    return AUTH_ERROR_PATTERN.test(error.message.split("\n", 1)[0]);
+}
 
 export class QueryError extends Error {
     readonly kind: QueryErrorKind;
@@ -28,21 +47,13 @@ function effectiveSource(source: DataSource, bucket: string, timeoutSeconds: num
     if (!source.useSyncConfig) {
         return source;
     }
-    const config = readSyncS3Config();
-    if (!config) {
+    // 思源导入那一条必须和界面渲染走同一套归一化：补协议头、猜服务商、从 Endpoint 推导地域。
+    // 这里若自己再拼一遍，会把已补全的 Endpoint 换回思源里那种不带协议头的裸 host。
+    const resolved = siyuanRuntimeSource(source.name);
+    if (resolved.buckets.length === 0) {
         throw new QueryError("config", withQueryContext(new Error("SiYuan has no usable S3 sync configuration"), source, bucket, timeoutSeconds));
     }
-    const provider = detectProvider(config.endpoint);
-    return {
-        ...source,
-        provider,
-        endpoint: config.endpoint,
-        region: config.region || source.region,
-        accessKey: config.accessKey,
-        secretKey: config.secretKey,
-        credentialsError: false,
-        credentialsErrorReason: "",
-    };
+    return resolved;
 }
 
 function sourceContext(source: DataSource, bucket: string, timeoutSeconds: number): string {
@@ -102,12 +113,14 @@ export async function queryBucket(
     if (meta.accountIdRequired && effective.accountId.trim() === "") {
         throw configError("Account ID is required");
     }
+    // 连接检查的最小值是 1 秒，查询的最大值是 300 秒：这里只兜住非法值，不做额外收紧
+    const timeoutMs = Math.max(MIN_TEST_TIMEOUT_SECONDS, timeoutSeconds) * 1000;
     try {
         return await providerFor(effective.provider).query({
             source: effective,
             bucket: bucket.trim(),
-            timeoutMs: Math.max(5, timeoutSeconds) * 1000,
-            request: (request) => forward(request, Math.max(5, timeoutSeconds) * 1000),
+            timeoutMs,
+            request: (request) => forward(request, timeoutMs),
         });
     } catch (error) {
         const context = withQueryContext(error, effective, bucket.trim(), timeoutSeconds);
@@ -118,10 +131,7 @@ export async function queryBucket(
             throw new QueryError("network", context);
         }
         if (error instanceof ProviderError) {
-            if (/403|AccessDenied|SignatureDoesNotMatch|InvalidAccessKey|AuthFailure|Unauthorized|Forbidden/i.test(error.message)) {
-                throw new QueryError("auth", context);
-            }
-            throw new QueryError("provider", context);
+            throw new QueryError(isAuthError(error) ? "auth" : "provider", context);
         }
         throw new QueryError("provider", context);
     }

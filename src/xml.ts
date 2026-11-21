@@ -47,14 +47,17 @@ export function stringAt(value: unknown, key: string): string {
     return "";
 }
 
-/** 取数字字段；缺失或非法时返回 undefined（0 与「没这个字段」必须区分）。 */
+/**
+ * 取数字字段；缺失或非法时返回 undefined（0 与「没这个字段」必须区分）。
+ *
+ * 必须走 asNumber：空标签会被解析成空串，而 Number("")、Number(null)、Number(false)
+ * 都等于 0，直接用 Number 会把「服务商没给这个值」变成真实的零。
+ */
 export function numberAt(value: unknown, key: string): number | undefined {
     if (!value || typeof value !== "object") {
         return undefined;
     }
-    const field = (value as UnknownRecord)[key];
-    const parsed = typeof field === "number" ? field : Number(field);
-    return Number.isFinite(parsed) ? parsed : undefined;
+    return asNumber((value as UnknownRecord)[key]);
 }
 
 /** 取数组字段；单元素时 fast-xml-parser 会给对象，统一成数组。 */
@@ -81,7 +84,7 @@ export function jsonPath(value: unknown, ...keys: string[]): unknown {
     return current;
 }
 
-/** 把 JSON 里的数字/字符串统一成 number；null、空串与布尔值视为「没有值」，不能当 0。 */
+/** 把 JSON/XML 里的数字与字符串统一成 number；null、空串与布尔值视为「没有值」，不能当 0。 */
 export function asNumber(value: unknown): number | undefined {
     if (typeof value === "number") {
         return Number.isFinite(value) ? value : undefined;

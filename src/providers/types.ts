@@ -64,26 +64,28 @@ export interface BucketUsage {
     errors?: string[];
 }
 
+/**
+ * 适配器只声明 id 与查询实现。
+ *
+ * 表单里的必填项、可见性与文案统一取自 `PROVIDER_META`：两处各写一份必然漂移，
+ * 界面按一处渲染、查询按另一处校验时就会对不上。
+ */
 export interface ProviderDefinition {
     id: ProviderId;
-    /** i18n key，例如 provider.aliyunOss */
-    labelKey: string;
-    endpointRequired: boolean;
-    regionRequired: boolean;
-    accountIdRequired: boolean;
-    accessKeyLabelKey: string;
-    secretKeyRequired: boolean;
-    bucketHintKey: string;
     query(ctx: QueryContext): Promise<BucketUsage>;
 }
 
 /** 服务商返回的可读错误；界面只展示 message，不展示请求头。 */
 export class ProviderError extends Error {
+    /** 服务商错误码（XML 的 Code / JSON 的 code），只用于归类，不展示。 */
     readonly code: string;
+    /** 服务商返回的 HTTP 状态码；请求根本没拿到响应时为空。 */
+    readonly status?: number;
 
-    constructor(message: string, code = "") {
+    constructor(message: string, options: {code?: string; status?: number} = {}) {
         super(message);
         this.name = "ProviderError";
-        this.code = code;
+        this.code = options.code ?? "";
+        this.status = options.status;
     }
 }

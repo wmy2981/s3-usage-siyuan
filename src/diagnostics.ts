@@ -14,12 +14,18 @@ const SENSITIVE_HEADERS = new Set([
     "x-tc-token",
 ]);
 
-function redact(text: string): string {
+export function redact(text: string): string {
     return text
         // 认证头先整段抹掉：否则通用规则只吃掉认证方案名，令牌会留在行尾
         .replace(/(authorization"?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\r\n]+)/gi, "$1[REDACTED]")
         .replace(/\b(Bearer|Qiniu)\s+[^\s,;]+/gi, "$1 [REDACTED]")
+        // OSS / OBS / QBox 的认证格式是「方案 + AccessKey:Signature」，
+        // 只认这种令牌形状，避免把 “Unexpected OSS response” 这类正文一起吃掉
+        .replace(/\b(OSS|OBS|QBox)\s+[A-Za-z0-9._~-]+:[A-Za-z0-9+/=_.~-]+/gi,
+            (_match, scheme: string) => `${scheme} [REDACTED]`)
         .replace(/(Credential=)([^/,\s]+)/gi, "$1[REDACTED]")
+        // 华为云 SDK-HMAC-SHA256 的 Authorization 形如 `Access=<AK>, SignedHeaders=...`
+        .replace(/\b(Access=)([^,;\s]+)/gi, "$1[REDACTED]")
         .replace(/((?:access_?key(?:id)?|secret(?:access)?_?key|secretid|secretkey|signature|api_?key|api_?token|token|password)"?\s*[=:]\s*)(?:"([^"]*)"|'([^']*)'|([^\s,;&]+))/gi,
             (_match, prefix: string) => `${prefix}[REDACTED]`);
 }
@@ -46,7 +52,16 @@ export function requestHeadersText(headers: Record<string, string>): string {
 }
 
 export function responseHeadersText(headers: Record<string, string[]> | null): string {
-    return formatValue(headers);
+    if (!headers) {
+        return formatValue(headers);
+    }
+    // 响应头同样可能回显 Set-Cookie、认证令牌等敏感值，与请求头共用同一份敏感名单
+    return JSON.stringify(Object.fromEntries(Object.entries(headers).map(([name, values]) => [
+        name,
+        SENSITIVE_HEADERS.has(name.toLowerCase())
+            ? ["[REDACTED]"]
+            : (Array.isArray(values) ? values : [String(values)]).map((value) => redact(value)),
+    ])), null, 2);
 }
 
 /** 不把原始响应压成一行，也不截断；错误码、RequestId 等全部保留。 */
