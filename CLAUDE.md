@@ -53,13 +53,13 @@ tests/                  纯函数测试，不依赖思源实例
 ## 服务商实现备注
 
 - 阿里云 OSS：默认 OSS4-HMAC-SHA256（2025-09-01 后新建桶不再支持 V1）；403 时回退 V1。V4 的 CanonicalRequest 有 6 段，Canonical URI 带桶名，空值子资源写 `stat`（不补 `=`）。流量/请求数走云监控 `DescribeMetricList`（RPC 签名，`acs_oss_dashboard`，Period=60，24 小时求和）。
-- 腾讯云 COS：云监控 Region 固定 `ap-guangzhou`；存储类单位 MB，换算成字节；TC3 签名按官方 Go / Python SDK 只签 `content-type` 与 `host`（`X-TC-*` 照常发送但不参与签名），POST 必须带真实请求体。流量/请求数取最近 24 小时求和，存储量仍取最新点。
+- 腾讯云 COS：云监控 Region 固定 `ap-guangzhou`；存储类单位 MB，换算成字节；TC3 签名按官方 Go / Python SDK 只签 `content-type` 与 `host`（`X-TC-*` 照常发送但不参与签名），POST 必须带真实请求体。流量/请求数取最近 24 小时求和，存储量仍取最新点；这三项走 `withMetrics`，失败只记 `errors`，容量照常展示。
 - 华为云 OBS：原生 V2 签名（HMAC-SHA1，Authorization 标签 `OBS`）；转发层会写 Content-Type，因此按 `application/json` 参与签名。流量/请求数走 CES `ShowMetricData`（SDK-HMAC-SHA256，CanonicalURI 签名时必须补结尾 `/`），URL 需要项目 ID（填在 Account ID）；请求数由 `request_count_per_second` 乘周期积分。
 - 火山引擎 TOS：TOS4-HMAC-SHA256；密钥派生起点是裸 SK；`?stat` 的 CanonicalQueryString 是 `stat=`。流量/请求数走云监控 `GetMetricData`（service 为 `cloudmonitor`，维度 `ResourceID` 即桶名），带宽与 QPS 为速率，按 1h 周期积分。
 - 七牛云：HMAC-SHA1 管理签名，签名串包含方法、原始 query、Host、Content-Type、`X-Qiniu-Date` 和末尾两个换行；URL-safe base64 保留 `=`。`blob_io` / `rs_put` 返回 `[{time, values}]` 数组，与 `space`/`count` 的 `times`/`datas` 不同。
-- MinIO：Admin API `datausageinfo`，字段以 `bucketsUsageInfo` 为准，兼容旧 `bucketsSizes`；返回的是最近一次扫描快照。流量/请求数来自 Prometheus 桶指标（`/minio/v2/metrics/bucket`，v3 为 `/minio/metrics/v3/bucket/api/<bucket>`），认证是 HS512 JWT（claims `exp/sub/iss=prometheus`，密钥为 Secret Key），数值是自进程启动以来的累计值。
+- MinIO：Admin API `datausageinfo`，字段以 `bucketsUsageInfo` 为准，兼容旧 `bucketsSizes`；返回的是最近一次扫描快照。流量/请求数来自 Prometheus 桶指标（`/minio/v2/metrics/bucket`，v3 为 `/minio/metrics/v3/bucket/api/<bucket>`），认证是 HS512 JWT（claims `exp/sub/iss=prometheus`，密钥为 Secret Key），数值是自进程启动以来的累计值。v2 是集群级端点，缺 `bucket` 标签的样本不计入单桶；只有 v3 单桶端点才允许缺省标签。
 - Cloudflare R2：GraphQL `r2StorageAdaptiveGroups` / `r2OperationsAdaptiveGroups` / `r2BandwidthUsageAdaptiveGroups`；带宽字段是 `bytesUpload` / `bytesDownload`，请求与流量取最近 24 小时合计。
-- AWS S3：CloudWatch `BucketSizeBytes` 按 StorageType 逐类查询后求和；`NumberOfObjects` 用 `AllStorageTypes`；每日粒度。请求指标（`AllRequests` / `BytesUploaded` / `BytesDownloaded`）必须先 `ListMetrics` 拿到 `FilterId`，维度是 `BucketName + FilterId`，用 `Sum` 统计最近 24 小时；未启用时返回空数据点。
+- AWS S3：CloudWatch `BucketSizeBytes` 按 StorageType 逐类查询后求和（12 个存储类按 4 条并发，串行太慢）；`NumberOfObjects` 用 `AllStorageTypes`；每日粒度。请求指标（`AllRequests` / `BytesUploaded` / `BytesDownloaded`）必须先 `ListMetrics` 拿到 `FilterId`，维度是 `BucketName + FilterId`，用 `Sum` 统计最近 24 小时；未启用时返回空数据点；桶上有多条过滤器时全部相加，并在 `notes` 里提示可能重复计数。
 
 ## 本地端到端验证（临时实例）
 
