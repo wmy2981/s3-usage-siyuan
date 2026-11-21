@@ -33,7 +33,6 @@ const QUERY = `query R2Usage($accountTag: string!, $bucketName: string!, $start:
       r2BandwidthUsageAdaptiveGroups(
         limit: 1000
         filter: {datetime_geq: $dayStart, datetime_lt: $end, bucketName: $bucketName}
-        orderBy: [datetimeHour_ASC]
       ) {
         sum { bytesUpload bytesDownload }
       }
@@ -112,7 +111,8 @@ export const cloudflareR2: ProviderDefinition = {
     async query({source, bucket, request}) {
         const accountTag = requireAccountId(source);
         const end = new Date();
-        const start = new Date(end.getTime() - 31 * 24 * 60 * 60 * 1000);
+        // 自适应数据集只保留 31 天：紧贴上限查询会因时钟偏差超限，留一小时余量
+        const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
         const dayStart = new Date(end.getTime() - 24 * 60 * 60 * 1000);
         const body = JSON.stringify({
             query: QUERY,

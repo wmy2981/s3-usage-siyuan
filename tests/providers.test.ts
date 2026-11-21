@@ -1,6 +1,7 @@
 import {describe, expect, it} from "vitest";
 import {createHash, createHmac} from "node:crypto";
 import type {DataSource} from "../src/config";
+import {cloudflareR2} from "../src/providers/cloudflare-r2";
 import {qiniuKodo} from "../src/providers/qiniu-kodo";
 import {volcanoTos} from "../src/providers/volcano-tos";
 import {tencentCos} from "../src/providers/tencent-cos";
@@ -200,5 +201,28 @@ describe("Volcano TOS CloudMonitor requests", () => {
             const payload = JSON.parse(request.body ?? "{}") as {StatisticsMethods?: string};
             expect(payload.StatisticsMethods).toBe("avg");
         }
+    });
+});
+
+describe("Cloudflare R2 GraphQL requests", () => {
+    it("stays inside the 31-day window and orders nothing it did not select", async () => {
+        const requests: ForwardRequest[] = [];
+        await cloudflareR2.query({
+            source: {
+                id: "r2", name: "r2", provider: "cloudflareR2", buckets: ["photos"],
+                endpoint: "", region: "", accountId: "account-tag", useSyncConfig: false,
+                accessKey: "API_TOKEN", secretKey: "", credentialsError: false, credentialsErrorReason: "",
+            },
+            bucket: "photos", timeoutMs: 5000,
+            request: async (request) => {
+                requests.push(request);
+                return {status: 200, body: JSON.stringify({data: {viewer: {accounts: [{}]}}}), headers: null};
+            },
+        });
+        const body = JSON.parse(requests[0].body ?? "{}") as {query: string; variables: {start: string; end: string}};
+        // 带宽数据集没有选 datetimeHour，不能按它排序
+        expect(body.query).not.toContain("orderBy: [datetimeHour_ASC]");
+        expect(Date.parse(body.variables.end) - Date.parse(body.variables.start))
+            .toBe(30 * 24 * 60 * 60 * 1000);
     });
 });
