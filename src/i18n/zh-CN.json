@@ -121,8 +121,6 @@
   "copy": "复制",
   "copied": "已复制",
   "copyFailed": "复制失败",
-  "expand": "展开",
-  "collapse": "收起",
   "noteOssDelay": "OSS 统计非实时，延时可能超过 1 小时。",
   "noteCosDelay": "COS 监控数据约延迟 2 小时。",
   "noteObsDelay": "OBS 桶存量为后台统计，可能有延时。",

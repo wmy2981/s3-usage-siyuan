@@ -31,7 +31,7 @@ import type {BucketUsage} from "../providers/types";
 import {PROVIDER_META} from "../providers/meta";
 import {queryBucket, QueryError} from "../query";
 import {bindMobileDrawer, isMobileFrontend} from "./drawer";
-import {clear, copyButton, el, fieldRow, foldText, iconButton, labeledIconButton, settleFolds} from "./dom";
+import {clear, copyButton, el, fieldRow, iconButton, labeledIconButton} from "./dom";
 import {renderSourceList, SourceForm} from "./source-form";
 
 const DIALOG_CLASS = "s3u-dialog";
@@ -206,8 +206,6 @@ export class UsageDialog {
         } else {
             this.renderUsage(switching);
         }
-        // 折叠判定要等节点进文档后量高度，这里统一收尾
-        settleFolds(this.root);
     }
 
     /** 给视图正文加进入动画，调用方只在切页时传 true。 */
@@ -396,8 +394,7 @@ export class UsageDialog {
         const box = el("div", "s3u__error");
         const message = this.errorMessage(source, result.error);
         box.append(el("div", "s3u__error-title", this.t("queryFailed")));
-        // 报错可能带着整段响应体和堆栈，默认收起；复制按钮仍复制全文
-        box.append(foldText(el("div", "s3u__error-text", message), this.t("expand"), this.t("collapse")));
+        box.append(el("div", "s3u__error-text", message));
         // 复制和重试放在同一行：报错时用户先复制，再刷新
         const actions = el("div", "s3u__error-actions");
         const retry = iconButton("iconRefresh", this.t("retry"));
@@ -503,7 +500,7 @@ export class UsageDialog {
                 continue;
             }
             const row = el("div", "s3u__note s3u__note--row");
-            row.append(foldText(el("span", "s3u__note-text", text), this.t("expand"), this.t("collapse")));
+            row.append(el("span", "s3u__note-text", text));
             row.append(copyButton(() => text, this.t("copy"), this.t("copied"), this.t("copyFailed")));
             list.append(row);
         }
@@ -924,8 +921,7 @@ export class UsageDialog {
         for (const item of this.testResults) {
             const row = el("div", "s3u__test-row");
             const wrap = el("div", "s3u__test-message-wrap");
-            const message = el("div", item.ok ? "s3u__test-message" : "s3u__test-message s3u__test-message--error", item.message);
-            wrap.append(foldText(message, this.t("expand"), this.t("collapse")));
+            wrap.append(el("div", item.ok ? "s3u__test-message" : "s3u__test-message s3u__test-message--error", item.message));
             if (!item.ok && item.copyable !== false) {
                 wrap.append(copyButton(() => item.message, this.t("copy"), this.t("copied"), this.t("copyFailed")));
             }
@@ -1044,7 +1040,6 @@ export class UsageDialog {
             return;
         }
         old.replaceWith(this.bucketCard(source, bucket));
-        settleFolds(this.root);
     }
 
     private prepareLoading(): void {

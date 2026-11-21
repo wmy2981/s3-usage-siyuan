@@ -154,38 +154,3 @@ export function fieldRow(label: string, control: HTMLElement, hint = ""): HTMLEl
     row.append(body);
     return row;
 }
-
-/**
- * 长报错折叠：正文超过 6 行时默认收起，按钮切换展开 / 收起。
- *
- * 收起与否不看字符数：同一段报错在窄卡片和宽卡片里行数差很多。
- * 先按收起状态挂上，挂载后由 settleFolds 按实际高度决定是否露出按钮；
- * 没溢出的短报错直接展开，免得出现点了没反应的「展开」。
- */
-export function foldText(body: HTMLElement, expandLabel: string, collapseLabel: string): HTMLElement {
-    const wrap = el("div", "s3u__fold s3u__fold--collapsed");
-    body.classList.add("s3u__fold-body");
-    const toggle = button("s3u__fold-toggle", expandLabel);
-    toggle.hidden = true;
-    toggle.setAttribute("aria-expanded", "false");
-    toggle.addEventListener("click", () => {
-        const collapsed = wrap.classList.toggle("s3u__fold--collapsed");
-        toggle.textContent = collapsed ? expandLabel : collapseLabel;
-        toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    });
-    wrap.append(body, toggle);
-    return wrap;
-}
-
-/** 挂载后量一次：溢出的才露「展开」按钮，没溢出的直接展开。 */
-export function settleFolds(root: ParentNode): void {
-    for (const wrap of root.querySelectorAll<HTMLElement>(".s3u__fold--collapsed")) {
-        const body = wrap.querySelector<HTMLElement>(".s3u__fold-body");
-        // 未挂载或处于 display:none 时高度都是 0，按「不折叠」处理最安全
-        if (body && body.scrollHeight > body.clientHeight + 1) {
-            wrap.querySelector<HTMLElement>(".s3u__fold-toggle")?.removeAttribute("hidden");
-            continue;
-        }
-        wrap.classList.remove("s3u__fold--collapsed");
-    }
-}

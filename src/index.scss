@@ -473,14 +473,6 @@
     min-width: 0;
 }
 
-/* 折叠后正文外面多了一层容器，横排里的伸缩交给它 */
-.s3u__note--row > .s3u__fold,
-.s3u__test-message-wrap > .s3u__fold,
-.s3u__status-row > .s3u__fold {
-    flex: 1 1 auto;
-    min-width: 0;
-}
-
 .s3u__skeleton {
     display: flex;
     flex-direction: column;
@@ -534,51 +526,6 @@
     word-break: break-word;
     -webkit-user-select: text;
     user-select: text;
-}
-
-/*
- * 长报错折叠：收起只露 6 行，底部渐隐；展开后回到各处的 max-height，超出仍可滚动。
- * 6 行按各自的行高折算：报错正文 1.6，其余沿用 1.5。
- */
-.s3u__fold {
-    min-width: 0;
-}
-
-/* 正文可能原本是行内元素（失败原因、表单状态），要成块才能量高度、才能裁剪 */
-.s3u__fold-body {
-    display: block;
-}
-
-.s3u__fold--collapsed .s3u__fold-body {
-    max-height: 9em;
-    overflow: hidden;
-    -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 1.8em), transparent);
-    mask-image: linear-gradient(180deg, #000 calc(100% - 1.8em), transparent);
-}
-
-.s3u__fold--collapsed .s3u__error-text {
-    max-height: 9.6em;
-}
-
-/* 报错卡片是纵向 flex，容器不占满宽度时按钮会缩在左侧 */
-.s3u__error > .s3u__fold {
-    width: 100%;
-}
-
-.s3u__fold-toggle {
-    margin-top: 2px;
-    padding: 4px 0;
-    border: 0;
-    background: none;
-    color: var(--b3-theme-primary);
-    font-family: inherit;
-    font-size: 12px;
-    line-height: 1.5;
-    cursor: pointer;
-}
-
-.s3u__fold-toggle:hover {
-    text-decoration: underline;
 }
 
 .s3u__empty {
