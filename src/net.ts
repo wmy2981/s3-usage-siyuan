@@ -8,7 +8,6 @@
  * 转发接口要求管理员角色；发布服务访客是只读角色，必然 403，界面会按「发不出去」提示。
  */
 import {fetchSyncPost} from "siyuan";
-import {MAX_TRANSPORT_TIMEOUT_MS, MIN_TRANSPORT_TIMEOUT_MS} from "./config";
 import {
     diagnosticSection,
     detailedErrorText,
@@ -45,8 +44,7 @@ interface ForwardEnvelope {
  * 签名必然对不上，最后只会得到一个莫名其妙的 403。
  */
 export async function forward(request: ForwardRequest, timeoutMs: number): Promise<ForwardResponse> {
-    // 只做兜底：上下限取自配置层常量，不能比界面允许的范围更窄，否则会静默改写用户设置
-    const timeout = Math.min(MAX_TRANSPORT_TIMEOUT_MS, Math.max(MIN_TRANSPORT_TIMEOUT_MS, Math.round(timeoutMs)));
+    const timeout = Math.min(120_000, Math.max(5_000, Math.round(timeoutMs)));
     // 诊断文本只在失败分支生成：成功响应（例如 MinIO 的大 JSON、Prometheus 文本）不做任何额外格式化。
     const diagnostics = {request, timeoutMs: timeout};
     let response: ForwardEnvelope;

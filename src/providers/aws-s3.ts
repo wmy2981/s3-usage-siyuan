@@ -10,7 +10,6 @@
  * 必须在桶上单独启用 metrics configuration，指标维度固定是 BucketName + FilterId，
  * 所以先用 ListMetrics 找出 FilterId，再按 Sum 统计最近 24 小时。
  */
-import {mapLimit} from "../async";
 import {signAwsV4} from "../sign/aws-v4";
 import {arrayAt, asNumber, parseXml, recordAt, stringAt} from "../xml";
 import {requireAccessKey, requireRegion, requireSecretKey, providerError} from "./helpers";
@@ -98,18 +97,6 @@ export function parseListMetricsFilters(body: string): string[] {
     return filters;
 }
 
-/** 中国区（cn-*）在 `.com.cn` 分区，其余区域用通用域名。 */
-function monitoringUrl(region: string): string {
-    const suffix = region.startsWith("cn-") ? "amazonaws.com.cn" : "amazonaws.com";
-    return `https://monitoring.${region}.${suffix}/`;
-}
-
-/** 时间窗对齐到统计周期：否则首尾两个桶是残缺的，24 小时合计会偏移一个周期。 */
-function alignToPeriod(date: Date, periodSeconds: number): Date {
-    const periodMs = periodSeconds * 1000;
-    return new Date(Math.floor(date.getTime() / periodMs) * periodMs);
-}
-
 interface MetricQuery {
     metricName: string;
     unit: "Bytes" | "Count";
@@ -126,8 +113,8 @@ async function requestMetric(
     query: MetricQuery,
 ): Promise<string> {
     const region = requireRegion(ctx.source);
-    const url = monitoringUrl(region);
-    const end = alignToPeriod(new Date(), query.periodSeconds);
+    const url = `https://monitoring.${region}.amazonaws.com/`;
+    const end = new Date();
     const start = new Date(end.getTime() - query.windowMs);
     const params = new URLSearchParams({
         Action: "GetMetricStatistics",
@@ -196,7 +183,7 @@ async function listRequestMetricFilters(
     bucket: string,
 ): Promise<string[]> {
     const region = requireRegion(ctx.source);
-    const url = monitoringUrl(region);
+    const url = `https://monitoring.${region}.amazonaws.com/`;
     const payload = new URLSearchParams({
         Action: "ListMetrics",
         Version: "2010-08-01",
@@ -252,35 +239,37 @@ async function sumRequestMetric(
 
 export const awsS3: ProviderDefinition = {
     id: "awsS3",
+    labelKey: "providerAwsS3",
+    endpointRequired: false,
+    regionRequired: true,
+    accountIdRequired: false,
+    accessKeyLabelKey: "providerAwsS3Token",
+    secretKeyRequired: true,
+    bucketHintKey: "sourceBucketPlaceholder",
     async query(ctx) {
-        // 12 个存储类 + 对象数：串行要跨网往返十几次，单桶就能耗十几秒；按 4 条并发压成几轮。
-        const storageResults = await mapLimit(STORAGE_TYPES, 4, async (storageType) => {
-            try {
-                return await getMetric(ctx, ctx.bucket, "BucketSizeBytes", storageType.value, "Bytes");
-            } catch (error) {
-                // 某个存储类在部分区域不发布是正常情况，缺哪个就不算哪个
-                if (error instanceof ProviderError && /InvalidParameterValue|InvalidParameterCombination/i.test(error.message)) {
-                    return {};
-                }
-                throw error;
-            }
-        });
         const classes: StorageClassUsage[] = [];
         let storageBytes = 0;
         let hasStorage = false;
         let dataTime = 0;
-        STORAGE_TYPES.forEach((storageType, index) => {
-            const metric = storageResults[index];
-            if (metric.value === undefined) {
-                return;
+        for (const storageType of STORAGE_TYPES) {
+            try {
+                const metric = await getMetric(ctx, ctx.bucket, "BucketSizeBytes", storageType.value, "Bytes");
+                if (metric.value !== undefined) {
+                    storageBytes += metric.value;
+                    hasStorage = true;
+                    dataTime = Math.max(dataTime, metric.timestamp ?? 0);
+                    if (metric.value > 0) {
+                        classes.push({key: storageType.key, name: storageType.name, storageBytes: metric.value});
+                    }
+                }
+            } catch (error) {
+                // 某个存储类在部分区域不发布是正常情况；只有全部失败才在下面报错
+                if (error instanceof ProviderError && /InvalidParameterValue|InvalidParameterCombination/i.test(error.message)) {
+                    continue;
+                }
+                throw error;
             }
-            storageBytes += metric.value;
-            hasStorage = true;
-            dataTime = Math.max(dataTime, metric.timestamp ?? 0);
-            if (metric.value > 0) {
-                classes.push({key: storageType.key, name: storageType.name, storageBytes: metric.value});
-            }
-        });
+        }
         const objects = await getMetric(ctx, ctx.bucket, "NumberOfObjects", "AllStorageTypes", "Count");
         dataTime = Math.max(dataTime, objects.timestamp ?? 0);
 
@@ -293,10 +282,6 @@ export const awsS3: ProviderDefinition = {
                 return {};
             }
             notes.push("noteMetricsWindow");
-            if (filters.length > 1) {
-                // 整桶过滤器与按前缀过滤器的统计范围会重叠，相加可能重复计数
-                notes.push("noteAwsMultiFilter");
-            }
             const [requestCount, trafficInBytes, trafficOutBytes] = await Promise.all([
                 sumRequestMetric(ctx, ctx.bucket, filters, "AllRequests", "Count"),
                 sumRequestMetric(ctx, ctx.bucket, filters, "BytesUploaded", "Bytes"),

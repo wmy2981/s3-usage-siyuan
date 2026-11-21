@@ -47,20 +47,19 @@ tests/                  纯函数测试，不依赖思源实例
 - `fieldRow` 的行容器必须是 `div`，只有标签文字用 `<label for>` 关联控件：整行 `<label>` 会让点空白也聚焦输入框、弹出键盘或展开下拉。
 - 移动端（`getFrontend()` 为 `mobile` / `browser-mobile`）整个对话框是宿主的底部抽屉，所有页面共用：复用 `.mobile-bottom-sheet-dialog` / `.mobile-bottom-sheet` 原生类与 `b3-dialog--open` 时序，`ui/drawer.ts` 只补 70% 初始高度、抓手调高与下拉收起；桌面端保持居中弹窗。
 - 连接检查（设置页一键测试与表单内测试）都走 `testOneSource`：检查该源的全部桶，超时取 `testTimeoutSeconds`（默认 5 秒），与查询超时分开。
-- 刷新状态靠请求代次（`usage-dialog.ts` 的 `queryEpoch` 与 `activeEpoch`）：保存、删除、重载、关闭都推进代次，在途结果按代次丢弃；`dropResults()` 同时交出「查询中」的占用，让新一轮刷新立刻接手；`runQueries()` 只在仍持有该代次时复位按钮。宿主关闭对话框（点关闭按钮 / Esc / 遮罩）只走 `destroyCallback`，代次推进与骨架条目清理必须放在那里，否则重开时会误判「已有结果」而不再查询。
 - 预览图必须用思源本体 CSS 渲染：`assets/preview.html` 只放与 `ui/*.ts` 一致的 DOM，样式由 `scripts/render-preview.mjs` 从本机安装的思源注入（`SIYUAN_RESOURCES` 可覆盖路径），不要手写近似样式。
 - `plugin.json` 的 `name`、仓库名、安装目录名保持一致；`dev` 分支不发布，CD 只由 `main` 触发。
 
 ## 服务商实现备注
 
-- 阿里云 OSS：默认 OSS4-HMAC-SHA256（2025-09-01 后新建桶不再支持 V1）；403 时回退 V1。分类明细取 `*RealStorage`（实际存储量），与顶层 `Storage` 同口径；`*Storage` 是「不足 64 KB 按 64 KB」的计费口径，拿它做明细会让分类加和与总量对不上。V4 的 CanonicalRequest 有 6 段，Canonical URI 带桶名，空值子资源写 `stat`（不补 `=`）。流量/请求数走云监控 `DescribeMetricList`（RPC 签名，`acs_oss_dashboard`，Period=60，24 小时求和）。
-- 腾讯云 COS：云监控 Region 固定 `ap-guangzhou`（地域对查询没有影响，表单里是可选项）；bucket 维度必须是带 APPID 的完整桶名，只填裸桶名时按 APPID 自动补后缀；存储类单位 MB，换算成字节；TC3 签名按官方 Go / Python SDK 只签 `content-type` 与 `host`（`X-TC-*` 照常发送但不参与签名），POST 必须带真实请求体。流量/请求数取最近 24 小时求和，存储量仍取最新点；这三项走 `withMetrics`，失败只记 `errors`，容量照常展示。
+- 阿里云 OSS：默认 OSS4-HMAC-SHA256（2025-09-01 后新建桶不再支持 V1）；403 时回退 V1。V4 的 CanonicalRequest 有 6 段，Canonical URI 带桶名，空值子资源写 `stat`（不补 `=`）。流量/请求数走云监控 `DescribeMetricList`（RPC 签名，`acs_oss_dashboard`，Period=60，24 小时求和）。
+- 腾讯云 COS：云监控 Region 固定 `ap-guangzhou`；存储类单位 MB，换算成字节；TC3 签名按官方 Go / Python SDK 只签 `content-type` 与 `host`（`X-TC-*` 照常发送但不参与签名），POST 必须带真实请求体。流量/请求数取最近 24 小时求和，存储量仍取最新点。
 - 华为云 OBS：原生 V2 签名（HMAC-SHA1，Authorization 标签 `OBS`）；转发层会写 Content-Type，因此按 `application/json` 参与签名。流量/请求数走 CES `ShowMetricData`（SDK-HMAC-SHA256，CanonicalURI 签名时必须补结尾 `/`），URL 需要项目 ID（填在 Account ID）；请求数由 `request_count_per_second` 乘周期积分。
-- 火山引擎 TOS：TOS4-HMAC-SHA256；密钥派生起点是裸 SK；`?stat` 的 CanonicalQueryString 是 `stat=`。`?stat` 返回 **JSON**（没有根节点，字段与官方 Go SDK 的 `GetBucketStatOutput` 一致：`Storage` 是字符串、`ObjectCount` 是数字，`ArchiveFrStorageStat` 是归档闪回）。流量/请求数走云监控 `GetMetricData`（service `cloudmonitor`，维度 `ResourceID` 即桶名），带宽与 QPS 单位是 MB/s，按 1h 周期积分；该接口必须写并签名 `X-Content-Sha256`（官方 SDK 对每个请求都加），`StatisticsMethods` 用字符串 `"avg"`（与官方请求示例一致，参数表虽写 Array of String）。
-- 七牛云：统计接口覆盖 6 个存储类（`space`/`count` 与 `_line`/`_archive`/`_deep_archive`/`_archive_ir`/`_intelligent_tiering`）。HMAC-SHA1 管理签名，签名串包含方法、原始 query、Host、Content-Type、`X-Qiniu-Date` 和末尾两个换行；URL-safe base64 保留 `=`。自定义 Endpoint 走 `normalizeEndpoint`（表单允许只填裸 host，原样拼进 URL 会让 `new URL()` 抛错）。`blob_io` / `rs_put` 返回 `[{time, values}]` 数组，与 `space`/`count` 的 `times`/`datas` 不同。
-- MinIO：Admin API `datausageinfo`，字段以 `bucketsUsageInfo` 为准，两者都缺才报错（旧版只给 `bucketsSizes`）；返回的是最近一次扫描快照。流量/请求数来自 Prometheus 桶指标（`/minio/v2/metrics/bucket`，v3 为 `/minio/metrics/v3/bucket/api/<bucket>`），认证是 HS512 JWT（claims `exp/sub/iss=prometheus`，密钥为 Secret Key），数值是自进程启动以来的累计值。v2 是集群级端点，缺 `bucket` 标签的样本不计入单桶；只有 v3 单桶端点才允许缺省标签。
-- Cloudflare R2：GraphQL `r2StorageAdaptiveGroups` / `r2OperationsAdaptiveGroups` / `r2BandwidthUsageAdaptiveGroups`；自适应数据集只保留 31 天，窗口取 30 天；带宽与请求数把全部行求和，不写 `orderBy`（没选进 `dimensions` 的维度不能排序）；带宽字段是 `bytesUpload` / `bytesDownload`，请求与流量取最近 24 小时合计。
-- AWS S3：`cn-*` 区域走 `monitoring.<region>.amazonaws.com.cn`；时间窗按统计周期对齐。CloudWatch `BucketSizeBytes` 按 StorageType 逐类查询后求和（12 个存储类按 4 条并发，串行太慢）；`NumberOfObjects` 用 `AllStorageTypes`；每日粒度。请求指标（`AllRequests` / `BytesUploaded` / `BytesDownloaded`）必须先 `ListMetrics` 拿到 `FilterId`，维度是 `BucketName + FilterId`，用 `Sum` 统计最近 24 小时；未启用时返回空数据点；桶上有多条过滤器时全部相加，并在 `notes` 里提示可能重复计数。`ListMetrics` 只列出最近两周内有数据的指标，为空既可能是没启用，也可能是近期没有请求。
+- 火山引擎 TOS：TOS4-HMAC-SHA256；密钥派生起点是裸 SK；`?stat` 的 CanonicalQueryString 是 `stat=`。流量/请求数走云监控 `GetMetricData`（service 为 `cloudmonitor`，维度 `ResourceID` 即桶名），带宽与 QPS 为速率，按 1h 周期积分。
+- 七牛云：HMAC-SHA1 管理签名，签名串包含方法、原始 query、Host、Content-Type、`X-Qiniu-Date` 和末尾两个换行；URL-safe base64 保留 `=`。`blob_io` / `rs_put` 返回 `[{time, values}]` 数组，与 `space`/`count` 的 `times`/`datas` 不同。
+- MinIO：Admin API `datausageinfo`，字段以 `bucketsUsageInfo` 为准，兼容旧 `bucketsSizes`；返回的是最近一次扫描快照。流量/请求数来自 Prometheus 桶指标（`/minio/v2/metrics/bucket`，v3 为 `/minio/metrics/v3/bucket/api/<bucket>`），认证是 HS512 JWT（claims `exp/sub/iss=prometheus`，密钥为 Secret Key），数值是自进程启动以来的累计值。
+- Cloudflare R2：GraphQL `r2StorageAdaptiveGroups` / `r2OperationsAdaptiveGroups` / `r2BandwidthUsageAdaptiveGroups`；带宽字段是 `bytesUpload` / `bytesDownload`，请求与流量取最近 24 小时合计。
+- AWS S3：CloudWatch `BucketSizeBytes` 按 StorageType 逐类查询后求和；`NumberOfObjects` 用 `AllStorageTypes`；每日粒度。请求指标（`AllRequests` / `BytesUploaded` / `BytesDownloaded`）必须先 `ListMetrics` 拿到 `FilterId`，维度是 `BucketName + FilterId`，用 `Sum` 统计最近 24 小时；未启用时返回空数据点。
 
 ## 本地端到端验证（临时实例）
 

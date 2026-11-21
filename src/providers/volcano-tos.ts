@@ -5,11 +5,10 @@
  * scope 终止串是 `request`，Authorization 的逗号后不带空格。子资源 `?stat` 必须出现在
  * CanonicalQueryString 里写成 `stat=`，否则签名对不上。
  */
-import {mapLimit} from "../async";
 import {detailedErrorText, requestSection} from "../diagnostics";
 import {signAwsV4} from "../sign/aws-v4";
 import {virtualHostBucketUrl} from "../sign/oss-v1";
-import {asNumber, jsonPath} from "../xml";
+import {asNumber, jsonPath, numberAt, parseXml, recordAt} from "../xml";
 import {requireAccessKey, requireEndpoint, requireRegion, requireSecretKey, providerError} from "./helpers";
 import {MONITOR_WINDOW_MS, sumDefined, withMetrics} from "./monitoring";
 import type {BucketUsage, ProviderDefinition, StorageClassUsage} from "./types";
@@ -32,55 +31,44 @@ const QPS_METRICS = [
     "DeleteObjectsQps",
 ];
 
-/** 取一个存储统计节点；TOS 的 `Storage` 是字符串，统一走 asNumber。 */
-function statEntry(value: unknown): {storageBytes?: number; objectCount?: number} | undefined {
-    if (!value || typeof value !== "object") {
-        return undefined;
-    }
-    return {
-        storageBytes: asNumber(jsonPath(value, "Storage")),
-        objectCount: asNumber(jsonPath(value, "ObjectCount")),
-    };
-}
-
-/**
- * `GET /?stat` 返回的是 **JSON**（没有根节点包装），字段与官方 Go SDK 的
- * `GetBucketStatOutput` 一一对应：Storage 是字符串，对象数是数字。
- */
 function parseTosStat(body: string): BucketUsage {
-    let payload: unknown;
-    try {
-        payload = JSON.parse(body);
-    } catch {
-        throw new ProviderError(`Unexpected TOS response: not JSON\nResponse body:\n${body}`);
-    }
-    if (!payload || typeof payload !== "object") {
-        throw new ProviderError(`Unexpected TOS response: empty body\nResponse body:\n${body}`);
+    const root = recordAt(parseXml(body), "BucketStat");
+    if (!root) {
+        throw new ProviderError(`Unexpected TOS response: missing BucketStat\nResponse body:\n${body}`);
     }
     const classes: StorageClassUsage[] = [];
-    const addClass = (key: string, name: string, ...nodePath: string[]) => {
-        const entry = statEntry(jsonPath(payload, ...nodePath));
-        if (!entry) {
-            return;
-        }
-        if ((entry.storageBytes ?? 0) > 0 || (entry.objectCount ?? 0) > 0) {
-            classes.push({key, name, ...entry});
+    const addClass = (key: string, name: string, nodeName: string) => {
+        const node = recordAt(root, nodeName);
+        const storageBytes = numberAt(node, "Storage");
+        const objectCount = numberAt(node, "ObjectCount");
+        if ((storageBytes ?? 0) > 0 || (objectCount ?? 0) > 0) {
+            classes.push({key, name, storageBytes, objectCount});
         }
     };
     addClass("standard", "STANDARD", "StandardStorageStat");
     addClass("ia", "IA", "IAStorageStat");
-    addClass("archiveFr", "ARCHIVE_FR", "ArchiveFrStorageStat");
     addClass("archive", "ARCHIVE", "ArchiveStorageStat");
     addClass("coldArchive", "COLD_ARCHIVE", "ColdArchiveStorageStat");
     addClass("deepArchive", "DEEP_COLD_ARCHIVE", "DeepColdArchiveStorageStat");
-    addClass("intelligentFa", "INTELLIGENT_TIERING_FA", "IntelligentTieringStorageStats", "HighFreqStorageStat");
-    addClass("intelligentIa", "INTELLIGENT_TIERING_IA", "IntelligentTieringStorageStats", "LowFreqStorageStat");
-    addClass("intelligentArchive", "INTELLIGENT_TIERING_ARCHIVE", "IntelligentTieringStorageStats", "ArchiveFrStorageStat");
-    const total = statEntry(jsonPath(payload, "TotalStorageStat"));
+    const intelligent = recordAt(root, "IntelligentTieringStorageStats");
+    if (intelligent) {
+        const addIntelligent = (key: string, name: string, nodeName: string) => {
+            const node = recordAt(intelligent, nodeName);
+            const storageBytes = numberAt(node, "Storage");
+            const objectCount = numberAt(node, "ObjectCount");
+            if ((storageBytes ?? 0) > 0 || (objectCount ?? 0) > 0) {
+                classes.push({key, name, storageBytes, objectCount});
+            }
+        };
+        addIntelligent("intelligentFa", "INTELLIGENT_TIERING_FA", "HighFreqStorageStat");
+        addIntelligent("intelligentIa", "INTELLIGENT_TIERING_IA", "LowFreqStorageStat");
+        addIntelligent("intelligentArchive", "INTELLIGENT_TIERING_ARCHIVE", "ArchiveFrStorageStat");
+    }
+    const total = recordAt(root, "TotalStorageStat");
     return {
-        storageBytes: total?.storageBytes ??
+        storageBytes: numberAt(total, "Storage") ??
             classes.reduce((sum, item) => sum + (item.storageBytes ?? 0), 0),
-        objectCount: total?.objectCount ??
+        objectCount: numberAt(total, "ObjectCount") ??
             classes.reduce((sum, item) => sum + (item.objectCount ?? 0), 0),
         storageClasses: classes,
         notes: ["noteTosDelay"],
@@ -140,9 +128,8 @@ async function cmSeries(
         secretKey: requireSecretKey(ctx.source),
         algorithm: "HMAC-SHA256",
         dateHeader: "x-date",
-        // 官方 SDK（volc-sdk-golang base/sign.go）对每个请求都写入并签名 X-Content-Sha256，
-        // 省掉这个头会让 SignedHeaders 与官方签名机制不一致
-        payloadHeader: "x-content-sha256",
+        // 官方示例只签 host、x-date（以及显式传入的 content-type），不额外写 payload 哈希头
+        payloadHeader: null,
         keyPrefix: "",
         terminal: "request",
     });
@@ -176,26 +163,19 @@ async function queryTraffic(
     ctx: Parameters<ProviderDefinition["query"]>[0],
     errors: string[],
 ): Promise<{trafficInBytes?: number; trafficOutBytes?: number; requestCount?: number}> {
-    const [outgoing, incoming] = await mapLimit(
-        [BANDWIDTH_METRICS.out, BANDWIDTH_METRICS.in],
-        2,
-        (metric) => cmSeries(ctx, "bandwidth", metric),
-    );
-    // 单个 API 的指标可能因版本差异不存在，缺哪个就少算哪个，不让整次查询失败。
-    // 云监控按秒限流，7 个 QPS 指标压到 4 条并发；失败原因汇总成一条说明，逐条细节跟在后面。
-    let requestsFailed = false;
-    const rates = await mapLimit(QPS_METRICS, 4, async (name) => {
+    const [outgoing, incoming] = await Promise.all([
+        cmSeries(ctx, "bandwidth", BANDWIDTH_METRICS.out),
+        cmSeries(ctx, "bandwidth", BANDWIDTH_METRICS.in),
+    ]);
+    // 单个 API 的指标可能因版本差异不存在，缺哪个就少算哪个，不让整次查询失败
+    const rates = await Promise.all(QPS_METRICS.map(async (name) => {
         try {
             return await cmSeries(ctx, "qps", name);
         } catch (error) {
-            if (!requestsFailed) {
-                requestsFailed = true;
-                errors.push("noteMetricsFailed");
-            }
             errors.push(`Metric ${name}: ${detailedErrorText(error)}`);
             return [];
         }
-    });
+    }));
     const requestCount = sumDefined(rates.flat().map((rate) => rate * HOUR_SECONDS));
     return {
         trafficOutBytes: sumDefined(outgoing.map((rate) => rate * HOUR_SECONDS * MB)),
@@ -206,6 +186,13 @@ async function queryTraffic(
 
 export const volcanoTos: ProviderDefinition = {
     id: "volcanoTos",
+    labelKey: "providerVolcanoTos",
+    endpointRequired: true,
+    regionRequired: true,
+    accountIdRequired: false,
+    accessKeyLabelKey: "providerVolcanoTosToken",
+    secretKeyRequired: true,
+    bucketHintKey: "sourceBucketPlaceholder",
     async query(ctx) {
         const {source, bucket, request} = ctx;
         const endpoint = requireEndpoint(source);

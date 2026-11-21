@@ -76,20 +76,6 @@ export class UsageDialog {
     private editing?: DataSource;
     private adding = false;
     private querying = false;
-    /**
-     * 请求代次：保存、删除、重载或关闭对话框都会递增。
-     *
-     * 在途请求返回时如果代次已经变了，这份结果就属于旧配置，必须丢弃；
-     * 否则旧请求会把已经作废的数据写回结果表并画到新卡片上。
-     */
-    private queryEpoch = 0;
-    /**
-     * 在途那一轮查询持有的代次；没有在途查询时为空。
-     *
-     * 与 `querying` 分开记：`dropResults()` 让旧一轮作废后新一轮必须能立刻接手，
-     * 而旧一轮结束时不能再把已经接班的新一轮标成「空闲」。
-     */
-    private activeEpoch?: number;
     private testing = false;
     private testResults?: SourceTestResult[];
     /** 移动端抽屉的清理函数；桌面端为空。 */
@@ -133,14 +119,6 @@ export class UsageDialog {
             content: '<div class="b3-dialog__content"><div class="s3u"></div><div class="s3u__live" role="status" aria-live="polite" aria-atomic="true"></div></div>',
             containerClassName: DIALOG_CLASS,
             destroyCallback: () => {
-                // 点关闭按钮、按 Esc、点遮罩都只走宿主的这个回调，不经过 destroy()：
-                // 代次必须在这里推进，否则在途请求的旧结果会写进下一次打开的对话框
-                this.queryEpoch += 1;
-                this.activeEpoch = undefined;
-                this.querying = false;
-                // 作废的那些卡片不会再收到结果：留着骨架条目会让重开对话框时
-                // 误判成「已有结果」而不再查询，界面就永远停在骨架屏上
-                this.forgetInFlight();
                 this.disposeDrawer?.();
                 this.disposeDrawer = undefined;
                 this.stopTimer();
@@ -184,7 +162,6 @@ export class UsageDialog {
 
     destroy(): void {
         this.stopTimer();
-        // 作废在途请求的活统一由 destroyCallback 承担：它一定会被 dialog.destroy() 触发
         this.dialog?.destroy();
         this.dialog = undefined;
         this.root = undefined;
@@ -207,7 +184,7 @@ export class UsageDialog {
     /** 同步配置被其他窗口改写后重新载入，不重建对话框。 */
     async reload(): Promise<void> {
         this.settings = await this.onReload();
-        this.dropResults();
+        this.results.clear();
         this.render();
         if (this.view === "usage") {
             void this.refreshAll();
@@ -662,7 +639,7 @@ export class UsageDialog {
             importButton.addEventListener("click", () => void this.importSyncSource());
             actions.append(importButton);
         }
-        // 测试连接：导入按钮右侧，始终显示；每个源查它的全部桶
+        // 测试连接：导入按钮右侧，始终显示；逐个源查第一个桶
         const test = labeledIconButton("b3-button b3-button--outline", "iconLink",
             this.t(this.testing ? "sourceTesting" : "sourceTest"));
         test.disabled = this.testing || this.settings.sources.length === 0;
@@ -800,7 +777,7 @@ export class UsageDialog {
             this.settings = await this.onSave({...this.settings, testTimeoutSeconds});
             showMessage(this.t("settingsSaved"), 2000, "info");
         } catch (error) {
-            showMessage(this.t("sourceSaveFailed", {message: errorSummary(error)}), 5000, "error");
+            showMessage(this.t("sourceTestFailed", {message: errorSummary(error)}), 5000, "error");
             this.render();
         }
     }
@@ -849,24 +826,10 @@ export class UsageDialog {
         void this.refreshAll();
     }
 
-    /** 丢掉还没回来的卡片条目；已经查完的卡片保留，重开对话框先显示上次结果。 */
-    private forgetInFlight(): void {
-        for (const [key, result] of this.results) {
-            if (result.state === "loading") {
-                this.results.delete(key);
-            }
-        }
-    }
-
-    /** 数据源变了，卡片结果与测试结果都作废，在途请求的结果也一并作废。 */
+    /** 数据源变了，卡片结果与测试结果都作废。 */
     private dropResults(): void {
-        this.queryEpoch += 1;
         this.results.clear();
         this.testResults = undefined;
-        // 在途的那一轮已经作废，立刻交出「查询中」的占用：否则调用方紧随其后的
-        // refreshAll() 会被互斥锁挡住，界面停在骨架屏上等一个永远不写结果的任务。
-        this.activeEpoch = undefined;
-        this.querying = false;
     }
 
     /** 清掉已持久化的凭据，但保留数据源本身；用户需要重新填写才能继续查询。 */
@@ -968,7 +931,7 @@ export class UsageDialog {
         return box;
     }
 
-    /** 测试全部源（含思源导入），每个源查它的全部桶。 */
+    /** 测试全部源（含思源导入），每个源只查第一个桶。 */
     private async testAllSources(): Promise<void> {
         if (this.testing || this.settings.sources.length === 0) {
             return;
@@ -977,16 +940,12 @@ export class UsageDialog {
         this.testResults = undefined;
         this.render();
         const results: SourceTestResult[] = [];
-        try {
-            for (const source of this.settings.sources) {
-                results.push(await this.testOneSource(source));
-            }
-            this.testResults = results;
-        } finally {
-            // 非预期异常也要解锁「测试中」，否则测试按钮会一直停在禁用态
-            this.testing = false;
-            this.render();
+        for (const source of this.settings.sources) {
+            results.push(await this.testOneSource(source));
         }
+        this.testResults = results;
+        this.testing = false;
+        this.render();
     }
 
     /** 连接检查：一个源的所有桶都查一次，按源汇总。 */
@@ -1035,7 +994,7 @@ export class UsageDialog {
             message: this.t("testFailedSummary", {
                 failed: failures.length,
                 total: source.buckets.length,
-                details: failures.join(this.t("detailSeparator")),
+                details: failures.join("；"),
             }),
         };
     }
@@ -1050,24 +1009,17 @@ export class UsageDialog {
 
     private async queryOne(source: DataSource, bucket: string): Promise<void> {
         const key = this.cardKey(source, bucket);
-        const epoch = this.queryEpoch;
         this.results.set(key, {state: "loading", fetchedAt: Date.now()});
         this.updateCard(source, bucket);
-        let result: BucketResult;
         try {
             const usage = await queryBucket(source, bucket, this.settings.timeoutSeconds);
-            result = {state: "ok", usage, fetchedAt: Date.now()};
+            this.results.set(key, {state: "ok", usage, fetchedAt: Date.now()});
         } catch (error) {
             const normalized = error instanceof QueryError
                 ? {kind: error.kind, message: error.message}
                 : {kind: "provider" as const, message: errorText(error)};
-            result = {state: "error", error: normalized, fetchedAt: Date.now()};
+            this.results.set(key, {state: "error", error: normalized, fetchedAt: Date.now()});
         }
-        // 期间数据源被改过（保存、删除、重载）或对话框已关闭：这份结果已经过期
-        if (epoch !== this.queryEpoch) {
-            return;
-        }
-        this.results.set(key, result);
         this.updateCard(source, bucket);
     }
 
@@ -1114,53 +1066,33 @@ export class UsageDialog {
 
     /** 查询任务本身不重建正文，只更新单张卡片；调用方负责先把骨架画出来。 */
     private async runQueries(): Promise<void> {
-        const epoch = this.queryEpoch;
         const tasks: {source: DataSource; bucket: string}[] = [];
         for (const source of this.settings.sources) {
             for (const bucket of source.buckets) {
                 tasks.push({source, bucket});
             }
         }
-        this.querying = true;
-        this.activeEpoch = epoch;
-        try {
-            if (tasks.length > 0) {
-                let next = 0;
-                const worker = async () => {
-                    while (next < tasks.length) {
-                        const task = tasks[next++];
-                        await this.queryOne(task.source, task.bucket);
-                    }
-                };
-                await Promise.all([worker(), worker()]);
-                if (epoch === this.queryEpoch) {
-                    const failed = tasks.filter((task) =>
-                        this.results.get(this.cardKey(task.source, task.bucket))?.state === "error").length;
-                    this.announce(failed === 0
-                        ? this.t("querySummaryOk", {count: tasks.length})
-                        : this.t("querySummaryFailed", {ok: tasks.length - failed, failed}));
-                }
-            }
-        } finally {
-            // 只有仍持有这一轮的调用才能复位：已作废的旧一轮结束时不能再把接了班的新一轮标成空闲；
-            // 一个桶都没有时（例如只导入了当前不可用的思源配置）也必须复位，
-            // 否则刷新按钮与自动刷新会一直卡在「查询中」。
-            if (this.activeEpoch === epoch) {
-                this.activeEpoch = undefined;
-                this.querying = false;
-                this.syncRefreshButton();
-            }
-        }
-    }
-
-    /** 刷新按钮只反映「是否正在查询」与「有没有数据源」；其他视图里有同名样式按钮，不能误改。 */
-    private syncRefreshButton(): void {
-        if (this.view !== "usage") {
+        if (tasks.length === 0) {
             return;
         }
+        this.querying = true;
+        let next = 0;
+        const worker = async () => {
+            while (next < tasks.length) {
+                const task = tasks[next++];
+                await this.queryOne(task.source, task.bucket);
+            }
+        };
+        await Promise.all([worker(), worker()]);
+        this.querying = false;
+        const failed = tasks.filter((task) =>
+            this.results.get(this.cardKey(task.source, task.bucket))?.state === "error").length;
+        this.announce(failed === 0
+            ? this.t("querySummaryOk", {count: tasks.length})
+            : this.t("querySummaryFailed", {ok: tasks.length - failed, failed}));
         const refresh = this.root?.querySelector<HTMLButtonElement>(".s3u__toolbar-actions .b3-button");
         if (refresh) {
-            refresh.disabled = this.querying || this.settings.sources.length === 0;
+            refresh.disabled = this.settings.sources.length === 0;
         }
     }
 

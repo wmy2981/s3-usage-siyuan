@@ -33,6 +33,7 @@ const QUERY = `query R2Usage($accountTag: string!, $bucketName: string!, $start:
       r2BandwidthUsageAdaptiveGroups(
         limit: 1000
         filter: {datetime_geq: $dayStart, datetime_lt: $end, bucketName: $bucketName}
+        orderBy: [datetimeHour_ASC]
       ) {
         sum { bytesUpload bytesDownload }
       }
@@ -53,15 +54,10 @@ export function parseR2Usage(payload: unknown): BucketUsage {
     const storage = jsonPath(account, "r2StorageAdaptiveGroups");
     const storageRow = Array.isArray(storage) ? storage[0] : undefined;
     const max = jsonPath(storageRow, "max");
-    const payloadSize = asNumber(jsonPath(max, "payloadSize"));
-    const metadataSize = asNumber(jsonPath(max, "metadataSize"));
-    // 两个字段都没给时不能算成 0：那会把「还没有快照」画成真实的零字节
-    const storageBytes = storageRow && (payloadSize !== undefined || metadataSize !== undefined)
-        ? (payloadSize ?? 0) + (metadataSize ?? 0)
-        : undefined;
+    const storageBytes = (asNumber(jsonPath(max, "payloadSize")) ?? 0) +
+        (asNumber(jsonPath(max, "metadataSize")) ?? 0);
     const objectCount = asNumber(jsonPath(max, "objectCount"));
     const datetime = jsonPath(storageRow, "dimensions", "datetime");
-    const parsedTime = typeof datetime === "string" ? Date.parse(datetime) : Number.NaN;
 
     let requestCount = 0;
     let hasRequests = false;
@@ -96,23 +92,29 @@ export function parseR2Usage(payload: unknown): BucketUsage {
     }
 
     return {
-        storageBytes,
+        storageBytes: storageRow ? storageBytes : undefined,
         objectCount,
         requestCount: hasRequests ? requestCount : undefined,
         trafficInBytes: hasTraffic ? trafficInBytes : undefined,
         trafficOutBytes: hasTraffic ? trafficOutBytes : undefined,
-        dataTime: Number.isFinite(parsedTime) ? parsedTime : undefined,
+        dataTime: typeof datetime === "string" ? Date.parse(datetime) : undefined,
         notes: ["noteR2Range", "noteR2Daily"],
     };
 }
 
 export const cloudflareR2: ProviderDefinition = {
     id: "cloudflareR2",
+    labelKey: "providerCloudflareR2",
+    endpointRequired: false,
+    regionRequired: false,
+    accountIdRequired: true,
+    accessKeyLabelKey: "providerCloudflareR2Token",
+    secretKeyRequired: false,
+    bucketHintKey: "sourceBucketPlaceholder",
     async query({source, bucket, request}) {
         const accountTag = requireAccountId(source);
         const end = new Date();
-        // 自适应数据集只保留 31 天：紧贴上限查询会因时钟偏差超限，留一小时余量
-        const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const start = new Date(end.getTime() - 31 * 24 * 60 * 60 * 1000);
         const dayStart = new Date(end.getTime() - 24 * 60 * 60 * 1000);
         const body = JSON.stringify({
             query: QUERY,

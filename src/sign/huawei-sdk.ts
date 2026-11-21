@@ -46,13 +46,11 @@ export async function huaweiSignedParts(options: HuaweiSdkOptions): Promise<Huaw
     const payload = options.payload ?? "";
     const date = options.date ?? new Date();
     const sdkDate = date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-    // 头名一律小写：大小写变体同时出现会得到重复的 SignedHeaders
-    const headers: Record<string, string> = {};
-    for (const [name, value] of Object.entries(options.headers ?? {})) {
-        headers[name.toLowerCase()] = value;
-    }
-    headers.host = url.host;
-    headers["x-sdk-date"] = sdkDate;
+    const headers: Record<string, string> = {
+        ...options.headers,
+        host: url.host,
+        "x-sdk-date": sdkDate,
+    };
     const entries = Object.entries(headers)
         .map(([name, value]) => [name.toLowerCase(), canonicalHeaderValue(value)] as const)
         .sort(([left], [right]) => byCodePoint(left, right));

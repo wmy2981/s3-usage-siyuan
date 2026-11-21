@@ -14,6 +14,7 @@ import {
     sha256Hex,
     toHex,
     uriEncode,
+    utf8,
 } from "./util";
 
 export interface AwsV4Options {
@@ -50,26 +51,22 @@ export async function signAwsV4(options: AwsV4Options): Promise<Record<string, s
     const date = options.date ?? new Date();
     const {amzDate, dateStamp} = amzDateParts(date);
     const algorithm = options.algorithm ?? "AWS4-HMAC-SHA256";
-    // 头名一律小写：否则调用方传入 "X-Amz-Date" 时会与这里补的同名头同时存在，
-    // 规范化后 SignedHeaders 里出现两个相同头名，服务端必然拒签。
-    const dateHeader = (options.dateHeader ?? "x-amz-date").toLowerCase();
-    const payloadHeader = options.payloadHeader === null
-        ? null
-        : (options.payloadHeader ?? "x-amz-content-sha256").toLowerCase();
+    const dateHeader = options.dateHeader ?? "x-amz-date";
+    const payloadHeader = options.payloadHeader === null ? null : options.payloadHeader ?? "x-amz-content-sha256";
     const keyPrefix = options.keyPrefix ?? "AWS4";
     const terminal = options.terminal ?? "aws4_request";
 
-    const headers: Record<string, string> = {};
-    for (const [name, value] of Object.entries(options.headers ?? {})) {
-        headers[name.toLowerCase()] = value;
-    }
-    headers.host = url.host;
-    headers[dateHeader] = amzDate;
+    const headers: Record<string, string> = {
+        ...options.headers,
+        host: url.host,
+        [dateHeader]: amzDate,
+    };
     if (payloadHeader !== null) {
         headers[payloadHeader] = payloadHash;
     }
     // 内核会自己写 Content-Length，签名里带上反而会与实际请求不一致
     delete headers["content-length"];
+    delete headers["Content-Length"];
 
     const normalized = Object.entries(headers)
         .map(([name, value]) => [name.toLowerCase(), canonicalHeaderValue(value)] as const)
@@ -118,4 +115,9 @@ export function canonicalQueryOf(url: URL): string {
         }
     }
     return canonicalQuery(params);
+}
+
+/** 让调用方可以只用字符串签名而不关心 TextEncoder。 */
+export function bytesOf(value: string): Uint8Array<ArrayBuffer> {
+    return utf8(value);
 }

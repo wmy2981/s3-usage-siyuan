@@ -8,10 +8,6 @@ export interface ProviderMeta {
     docsUrl: string;
     endpointRequired: boolean;
     regionRequired: boolean;
-    /** 服务商有默认 Endpoint、但允许自定义时置 true：字段可见但不强制。 */
-    endpointOptional?: boolean;
-    /** 地域可以从 Endpoint 推导、但允许手动指定时置 true：字段可见但不强制。 */
-    regionOptional?: boolean;
     accountIdRequired: boolean;
     /** 需要 Account ID 之外的额外信息时（华为云用项目 ID），显示但不强制。 */
     accountIdOptional?: boolean;
@@ -54,9 +50,7 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
         labelKey: "providerTencentCos",
         docsUrl: "https://cloud.tencent.com/document/product/598/40488",
         endpointRequired: false,
-        // 云监控固定走广州，地域对查询没有影响，只保留给用户备注归属
-        regionRequired: false,
-        regionOptional: true,
+        regionRequired: true,
         accountIdRequired: false,
         accessKeyLabelKey: "providerTencentCosToken",
         secretKeyLabelKey: "providerTencentCosSecret",
@@ -69,7 +63,6 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
         docsUrl: "https://support.huaweicloud.com/usermanual-ca/ca_01_0003.html",
         endpointRequired: true,
         regionRequired: false,
-        regionOptional: true,
         accountIdRequired: false,
         accountIdOptional: true,
         accountIdLabelKey: "sourceHuaweiProjectId",
@@ -97,8 +90,6 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
         docsUrl: "https://developer.qiniu.com/kodo/kb/7450/the-third-party-plug-in-key-parameters",
         endpointRequired: false,
         regionRequired: false,
-        endpointOptional: true,
-        regionOptional: true,
         accountIdRequired: false,
         accessKeyLabelKey: "providerQiniuKodoToken",
         secretKeyLabelKey: "providerQiniuKodoSecret",
@@ -111,7 +102,6 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
         docsUrl: "https://docs.min.io/aistor/administration/iam",
         endpointRequired: true,
         regionRequired: false,
-        regionOptional: true,
         accountIdRequired: false,
         accessKeyLabelKey: "providerMinioToken",
         secretKeyLabelKey: "providerMinioSecret",

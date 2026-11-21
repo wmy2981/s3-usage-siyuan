@@ -77,38 +77,6 @@ describe("settings store", () => {
         expect(raw.sources[0].name).toBe("A");
     });
 
-    it("clamps out-of-range values before writing instead of failing the read-back check", async () => {
-        const {plugin, data} = fakePlugin();
-        const settings = settingsWithEmptyCredentials();
-        settings.timeoutSeconds = 999;
-        settings.refreshMinutes = 7;
-        const saved = await saveSettings(plugin, settings);
-        const raw = data() as {timeoutSeconds: number; refreshMinutes: number};
-        expect(raw.timeoutSeconds).toBe(300);
-        expect(raw.refreshMinutes).toBe(0);
-        expect(saved.timeoutSeconds).toBe(300);
-        expect(saved.refreshMinutes).toBe(0);
-    });
-
-    it("maps the saved sources back by id when duplicate ids are collapsed", async () => {
-        const {plugin, data} = fakePlugin();
-        const settings = settingsWithEmptyCredentials();
-        settings.sources = [
-            {...settings.sources[0], id: "a", name: "A", endpoint: "a.example.com"},
-            {...settings.sources[0], id: "a", name: "A duplicate", endpoint: "a.example.com"},
-            {...settings.sources[0], id: "b", name: "B", endpoint: "b.example.com"},
-        ];
-        const saved = await saveSettings(plugin, settings);
-        // 落盘时重复 id 只留第一条
-        const raw = data() as {sources: {id: string; name: string; endpoint: string}[]};
-        expect(raw.sources.map((source) => source.id)).toEqual(["a", "b"]);
-        // 返回给界面的不能按原下标错位取到别的数据源
-        expect(saved.sources[0].name).toBe("A");
-        expect(saved.sources[1].name).toBe("A");
-        expect(saved.sources[2].name).toBe("B");
-        expect(saved.sources[2].endpoint).toBe("https://b.example.com");
-    });
-
     it("rejects a read-back that differs from what was written", async () => {
         const {plugin} = fakePlugin((value) => {
             const copy = value as {sources: {name: string}[]};

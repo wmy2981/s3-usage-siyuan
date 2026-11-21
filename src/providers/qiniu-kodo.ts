@@ -5,10 +5,9 @@
  * 全部 X-Qiniu-* 头，末尾恒定两个换行；签名结果用 URL-safe base64（保留 `=`）。
  * query 必须与实际 URL 字节一致，不能重排或二次编码。
  */
-import {mapLimit} from "../async";
 import {hmac, toBase64, utf8} from "../sign/util";
 import {asNumber, jsonPath} from "../xml";
-import {requireAccessKey, requireEndpoint, requireSecretKey, providerError} from "./helpers";
+import {requireAccessKey, requireSecretKey, providerError} from "./helpers";
 import {MONITOR_WINDOW_MS, sumDefined, withMetrics} from "./monitoring";
 import type {ProviderDefinition, StorageClassUsage} from "./types";
 import {ProviderError} from "./types";
@@ -32,11 +31,6 @@ const SPECS: StatSpec[] = [
     {path: "/v6/count_archive", key: "archive", name: "ARCHIVE", kind: "count"},
     {path: "/v6/space_deep_archive", key: "deepArchive", name: "DEEP_ARCHIVE", kind: "storage"},
     {path: "/v6/count_deep_archive", key: "deepArchive", name: "DEEP_ARCHIVE", kind: "count"},
-    // 官方统计接口里还有归档直读与智能分层两套存储类（数据统计接口文档）
-    {path: "/v6/space_archive_ir", key: "archiveIr", name: "ARCHIVE_IR", kind: "storage"},
-    {path: "/v6/count_archive_ir", key: "archiveIr", name: "ARCHIVE_IR", kind: "count"},
-    {path: "/v6/space_intelligent_tiering", key: "intelligent", name: "INTELLIGENT_TIERING", kind: "storage"},
-    {path: "/v6/count_intelligent_tiering", key: "intelligent", name: "INTELLIGENT_TIERING", kind: "count"},
 ];
 
 /** 七牛的 begin/end 是东八区的 14 位时间串，不能直接拿本机时区格式化。 */
@@ -68,7 +62,6 @@ export async function qiniuAuthorization(
     secretKey: string,
     signingString: string,
 ): Promise<string> {
-    // 只换成 URL-safe 字符表，保留 `=` 填充：七牛的管理签名要求原样透传 base64
     const signature = toBase64(await hmac("SHA-1", utf8(secretKey), signingString));
     const encoded = signature.replaceAll("+", "-").replaceAll("/", "_");
     return `Qiniu ${accessKey}:${encoded}`;
@@ -107,9 +100,7 @@ function latestValue(body: string): StatValue {
 
 function endpointFor(source: Parameters<ProviderDefinition["query"]>[0]["source"]): string {
     if (source.endpoint.trim() !== "") {
-        // 自定义 Endpoint 走与其他服务商一致的归一化：表单允许只填裸 host，
-        // 原样拼进 URL 会让 new URL() 直接抛 TypeError
-        return requireEndpoint(source);
+        return source.endpoint.replace(/\/+$/, "");
     }
     if (source.region === "ap-southeast-2") {
         return "https://api-ap-southeast-2.qiniuapi.com";
@@ -221,8 +212,27 @@ async function queryTraffic(
     return {trafficOutBytes: outflow, requestCount: sumDefined([getHits, putHits])};
 }
 
+async function mapLimit<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
+    const results: R[] = new Array(items.length);
+    let next = 0;
+    await Promise.all(Array.from({length: Math.min(limit, items.length)}, async () => {
+        while (next < items.length) {
+            const index = next++;
+            results[index] = await run(items[index]);
+        }
+    }));
+    return results;
+}
+
 export const qiniuKodo: ProviderDefinition = {
     id: "qiniuKodo",
+    labelKey: "providerQiniuKodo",
+    endpointRequired: false,
+    regionRequired: false,
+    accountIdRequired: false,
+    accessKeyLabelKey: "providerQiniuKodoToken",
+    secretKeyRequired: true,
+    bucketHintKey: "sourceBucketPlaceholder",
     async query(ctx) {
         const endpoint = endpointFor(ctx.source);
         const notes = ["noteQiniuDelay"];
