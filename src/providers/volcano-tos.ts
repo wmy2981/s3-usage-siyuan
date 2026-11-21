@@ -140,8 +140,9 @@ async function cmSeries(
         secretKey: requireSecretKey(ctx.source),
         algorithm: "HMAC-SHA256",
         dateHeader: "x-date",
-        // 官方示例只签 host、x-date（以及显式传入的 content-type），不额外写 payload 哈希头
-        payloadHeader: null,
+        // 官方 SDK（volc-sdk-golang base/sign.go）对每个请求都写入并签名 X-Content-Sha256，
+        // 省掉这个头会让 SignedHeaders 与官方签名机制不一致
+        payloadHeader: "x-content-sha256",
         keyPrefix: "",
         terminal: "request",
     });

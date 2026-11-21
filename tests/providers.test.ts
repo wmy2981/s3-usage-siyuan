@@ -2,6 +2,7 @@ import {describe, expect, it} from "vitest";
 import {createHash, createHmac} from "node:crypto";
 import type {DataSource} from "../src/config";
 import {qiniuKodo} from "../src/providers/qiniu-kodo";
+import {volcanoTos} from "../src/providers/volcano-tos";
 import {tencentCos} from "../src/providers/tencent-cos";
 import type {ForwardRequest} from "../src/providers/types";
 
@@ -144,6 +145,40 @@ describe("Qiniu Kodo endpoint handling", () => {
         const {urls} = await run("  ");
         for (const url of urls) {
             expect(url.startsWith("https://api.qiniuapi.com/v6/")).toBe(true);
+        }
+    });
+});
+
+describe("Volcano TOS CloudMonitor requests", () => {
+    it("signs the payload hash and asks for the average statistic", async () => {
+        const requests: ForwardRequest[] = [];
+        const usage = await volcanoTos.query({
+            source: {
+                id: "tos", name: "tos", provider: "volcanoTos", buckets: ["photos"],
+                endpoint: "https://tos-cn-beijing.volces.com", region: "cn-beijing", accountId: "",
+                useSyncConfig: false, accessKey: "AK", secretKey: "SK",
+                credentialsError: false, credentialsErrorReason: "",
+            },
+            bucket: "photos", timeoutMs: 5000,
+            request: async (request) => {
+                requests.push(request);
+                const body = request.url.endsWith("?stat")
+                    ? JSON.stringify({TotalStorageStat: {Storage: "4096", ObjectCount: 3}})
+                    : JSON.stringify({Result: {Data: {MetricDataResults: []}}});
+                return {status: 200, body, headers: null};
+            },
+        });
+        expect(usage.storageBytes).toBe(4096);
+
+        const posts = requests.filter((request) => request.method === "POST");
+        expect(posts).toHaveLength(9);
+        for (const request of posts) {
+            const hash = createHash("sha256").update(request.body ?? "").digest("hex");
+            // 官方 SDK 每个请求都会写 X-Content-Sha256 并把它计入 SignedHeaders
+            expect(request.headers["x-content-sha256"]).toBe(hash);
+            expect(request.headers.Authorization).toContain("x-content-sha256");
+            const payload = JSON.parse(request.body ?? "{}") as {StatisticsMethods?: string};
+            expect(payload.StatisticsMethods).toBe("avg");
         }
     });
 });
