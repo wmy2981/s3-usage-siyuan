@@ -5,7 +5,7 @@
  * 官方明确统计非实时，延时可能超过 1 小时；低频/归档的 Storage 是计费口径。
  */
 import {regionFromEndpoint} from "../config";
-import {requestSection} from "../diagnostics";
+import {diagnosticSection, requestSection, responseBodyText} from "../diagnostics";
 import {aliyunRpcUrl} from "../sign/aliyun-rpc";
 import {signV2, virtualHostBucketUrl} from "../sign/oss-v1";
 import {signOssV4} from "../sign/oss-v4";
@@ -167,6 +167,7 @@ export const aliyunOss: ProviderDefinition = {
         let response = await request({url, method: "GET", headers: v4Headers, contentType});
         // 老账号/老桶可能还没开 V4，403 时退回 V1；新桶 V4 正常时不会走到这里
         if (response.status === 403) {
+            const v4Response = response;
             const v1Headers = await signV2({
                 method: "GET",
                 url,
@@ -178,6 +179,15 @@ export const aliyunOss: ProviderDefinition = {
                 headerPrefix: "x-oss-",
             });
             response = await request({url, method: "GET", headers: v1Headers, contentType});
+            if (response.status !== 200) {
+                // V1 也失败时保留 V4 那次诊断：2025-09-01 之后的新桶只允许 V4，
+                // V1 的「签名版本已禁用」会把真正的权限错误（V4 的 403）盖掉。
+                const v1Message = providerError(response).message;
+                throw new ProviderError(v1Message +
+                    diagnosticSection("V4 attempt", `Status: ${v4Response.status}` +
+                        diagnosticSection("Response body", responseBodyText(v4Response.body))),
+                    {status: v4Response.status});
+            }
         }
         if (response.status !== 200) {
             throw providerError(response);

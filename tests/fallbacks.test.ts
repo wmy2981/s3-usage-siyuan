@@ -68,6 +68,23 @@ describe("diagnostics do not change provider control flow", () => {
         expect(usage.objectCount).toBe(3);
     });
 
+    it("keeps the V4 diagnostics when the V1 fallback fails too", async () => {
+        let calls = 0;
+        await expect(aliyunOss.query({
+            source: source("aliyunOss"), bucket: "photos", timeoutMs: 5000,
+            request: async () => {
+                calls += 1;
+                if (calls === 1) {
+                    return {status: 403, body: "<Error><Code>AccessDenied</Code></Error>", headers: null};
+                }
+                return {status: 403, body: "<Error><Code>SignatureVersionNotSupported</Code></Error>", headers: null};
+            },
+        })).rejects.toMatchObject({
+            message: expect.stringMatching(/SignatureVersionNotSupported[\s\S]*V4 attempt[\s\S]*Status: 403[\s\S]*AccessDenied/),
+        });
+        expect(calls).toBe(2);
+    });
+
     it("still falls back to the MinIO v4 usage endpoint after a 404", async () => {
         const paths: string[] = [];
         const usage = await minio.query({
