@@ -138,6 +138,9 @@ export class UsageDialog {
                 this.queryEpoch += 1;
                 this.activeEpoch = undefined;
                 this.querying = false;
+                // 作废的那些卡片不会再收到结果：留着骨架条目会让重开对话框时
+                // 误判成「已有结果」而不再查询，界面就永远停在骨架屏上
+                this.forgetInFlight();
                 this.disposeDrawer?.();
                 this.disposeDrawer = undefined;
                 this.stopTimer();
@@ -847,6 +850,15 @@ export class UsageDialog {
         showMessage(this.t("sourceSaved"), 2500, "info", "s3u-saved");
         this.render();
         void this.refreshAll();
+    }
+
+    /** 丢掉还没回来的卡片条目；已经查完的卡片保留，重开对话框先显示上次结果。 */
+    private forgetInFlight(): void {
+        for (const [key, result] of this.results) {
+            if (result.state === "loading") {
+                this.results.delete(key);
+            }
+        }
     }
 
     /** 数据源变了，卡片结果与测试结果都作废，在途请求的结果也一并作废。 */
