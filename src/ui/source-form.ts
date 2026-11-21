@@ -13,7 +13,7 @@ import {
 } from "../config";
 import type {T} from "../i18n";
 import {PROVIDER_META, PROVIDER_ORDER, type ProviderMeta} from "../providers/meta";
-import {button, clear, copyButton, el, fieldRow, icon, iconButton} from "./dom";
+import {button, clear, copyButton, el, fieldRow, foldText, icon, iconButton, settleFolds} from "./dom";
 
 export interface SourceFormOptions {
     t: T;
@@ -245,11 +245,12 @@ export class SourceForm {
         text.setAttribute("role", "status");
         text.setAttribute("aria-live", "polite");
         text.setAttribute("aria-atomic", "true");
-        row.append(text);
+        row.append(foldText(text, this.t("expand"), this.t("collapse")));
         if (copyable) {
             row.append(copyButton(() => message, this.t("copy"), this.t("copied"), this.t("copyFailed")));
         }
         this.status.append(row);
+        settleFolds(this.status);
     }
 
     /** 从控件读一遍，防止用户输入后没有触发 input 事件（例如浏览器自动填充）。 */

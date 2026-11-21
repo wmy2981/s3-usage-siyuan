@@ -121,6 +121,8 @@
   "copy": "Copy",
   "copied": "Copied",
   "copyFailed": "Copy failed",
+  "expand": "Expand",
+  "collapse": "Collapse",
   "noteOssDelay": "OSS statistics are not real-time; the delay can exceed 1 hour.",
   "noteCosDelay": "COS monitoring data is delayed by about 2 hours.",
   "noteObsDelay": "OBS bucket storage is background statistics and may be delayed.",
