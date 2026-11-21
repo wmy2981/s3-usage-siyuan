@@ -8,6 +8,7 @@ import type {DataSource} from "../src/config";
 import {aliyunOss} from "../src/providers/aliyun-oss";
 import {minio} from "../src/providers/minio";
 import {tencentCos} from "../src/providers/tencent-cos";
+import {volcanoTos} from "../src/providers/volcano-tos";
 
 function source(provider: DataSource["provider"]): DataSource {
     return {
@@ -105,6 +106,34 @@ describe("diagnostics do not change provider control flow", () => {
         expect(usage.objectCount).toBeGreaterThan(0);
         expect(usage.trafficInBytes).toBeUndefined();
         expect(usage.errors).toContain("noteMetricsFailed");
+    });
+
+    it("reports a single summary when individual TOS QPS metrics fail", async () => {
+        const usage = await volcanoTos.query({
+            source: source("volcanoTos"), bucket: "photos", timeoutMs: 5000,
+            request: async (request) => {
+                if (!request.body) {
+                    return {
+                        status: 200,
+                        body: "<BucketStat><TotalStorageStat><Storage>10</Storage><ObjectCount>1</ObjectCount></TotalStorageStat></BucketStat>",
+                        headers: null,
+                    };
+                }
+                const metric = (JSON.parse(request.body) as {MetricName: string}).MetricName;
+                if (metric === "GetObjectQps" || metric === "PutObjectQps") {
+                    return {status: 429, body: "rate limited", headers: null};
+                }
+                return {
+                    status: 200,
+                    body: JSON.stringify({Result: {Data: {MetricDataResults: [{DataPoints: [{Value: 0}]}]}}}),
+                    headers: null,
+                };
+            },
+        });
+        expect(usage.storageBytes).toBe(10);
+        const summaries = (usage.errors ?? []).filter((message) => message === "noteMetricsFailed");
+        expect(summaries).toHaveLength(1);
+        expect(usage.errors?.some((message) => message.startsWith("Metric GetObjectQps:"))).toBe(true);
     });
 
     it("still falls back to the MinIO v4 usage endpoint after a 404", async () => {

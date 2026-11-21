@@ -5,6 +5,7 @@
  * scope 终止串是 `request`，Authorization 的逗号后不带空格。子资源 `?stat` 必须出现在
  * CanonicalQueryString 里写成 `stat=`，否则签名对不上。
  */
+import {mapLimit} from "../async";
 import {detailedErrorText, requestSection} from "../diagnostics";
 import {signAwsV4} from "../sign/aws-v4";
 import {virtualHostBucketUrl} from "../sign/oss-v1";
@@ -163,19 +164,26 @@ async function queryTraffic(
     ctx: Parameters<ProviderDefinition["query"]>[0],
     errors: string[],
 ): Promise<{trafficInBytes?: number; trafficOutBytes?: number; requestCount?: number}> {
-    const [outgoing, incoming] = await Promise.all([
-        cmSeries(ctx, "bandwidth", BANDWIDTH_METRICS.out),
-        cmSeries(ctx, "bandwidth", BANDWIDTH_METRICS.in),
-    ]);
-    // 单个 API 的指标可能因版本差异不存在，缺哪个就少算哪个，不让整次查询失败
-    const rates = await Promise.all(QPS_METRICS.map(async (name) => {
+    const [outgoing, incoming] = await mapLimit(
+        [BANDWIDTH_METRICS.out, BANDWIDTH_METRICS.in],
+        2,
+        (metric) => cmSeries(ctx, "bandwidth", metric),
+    );
+    // 单个 API 的指标可能因版本差异不存在，缺哪个就少算哪个，不让整次查询失败。
+    // 云监控按秒限流，7 个 QPS 指标压到 4 条并发；失败原因汇总成一条说明，逐条细节跟在后面。
+    let requestsFailed = false;
+    const rates = await mapLimit(QPS_METRICS, 4, async (name) => {
         try {
             return await cmSeries(ctx, "qps", name);
         } catch (error) {
+            if (!requestsFailed) {
+                requestsFailed = true;
+                errors.push("noteMetricsFailed");
+            }
             errors.push(`Metric ${name}: ${detailedErrorText(error)}`);
             return [];
         }
-    }));
+    });
     const requestCount = sumDefined(rates.flat().map((rate) => rate * HOUR_SECONDS));
     return {
         trafficOutBytes: sumDefined(outgoing.map((rate) => rate * HOUR_SECONDS * MB)),
