@@ -5,6 +5,7 @@
  * 维度是 appid + bucket，Region 固定填 ap-guangzhou（与桶实际地域无关）。
  * 存储类指标单位是 MB，这里统一换算成字节；对象数和请求数是「个/次」。
  */
+import {mapLimit} from "../async";
 import {signTc3} from "../sign/tencent-tc3";
 import {diagnosticSection, requestSection} from "../diagnostics";
 import {asNumber, jsonPath} from "../xml";
@@ -171,20 +172,6 @@ async function getMetric(
             diagnosticSection("Operation", context()));
     }
     return options.sum === true ? summedCosPoint(parsed) : latestPoint(parsed);
-}
-
-/** 并发上限：腾讯云默认 50 次/秒，这里压到 4 条并发，避免一个桶就把额度打满。 */
-async function mapLimit<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
-    const results: R[] = new Array(items.length);
-    let next = 0;
-    const workers = Array.from({length: Math.min(limit, items.length)}, async () => {
-        while (next < items.length) {
-            const index = next++;
-            results[index] = await run(items[index]);
-        }
-    });
-    await Promise.all(workers);
-    return results;
 }
 
 export const tencentCos: ProviderDefinition = {

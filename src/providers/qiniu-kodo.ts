@@ -5,6 +5,7 @@
  * 全部 X-Qiniu-* 头，末尾恒定两个换行；签名结果用 URL-safe base64（保留 `=`）。
  * query 必须与实际 URL 字节一致，不能重排或二次编码。
  */
+import {mapLimit} from "../async";
 import {hmac, toBase64, utf8} from "../sign/util";
 import {asNumber, jsonPath} from "../xml";
 import {requireAccessKey, requireSecretKey, providerError} from "./helpers";
@@ -210,18 +211,6 @@ async function queryTraffic(
         (spec) => call(spec.path, spec.select, spec.metric, spec.field),
     );
     return {trafficOutBytes: outflow, requestCount: sumDefined([getHits, putHits])};
-}
-
-async function mapLimit<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
-    const results: R[] = new Array(items.length);
-    let next = 0;
-    await Promise.all(Array.from({length: Math.min(limit, items.length)}, async () => {
-        while (next < items.length) {
-            const index = next++;
-            results[index] = await run(items[index]);
-        }
-    }));
-    return results;
 }
 
 export const qiniuKodo: ProviderDefinition = {
