@@ -1,9 +1,17 @@
 import {describe, expect, it} from "vitest";
-import {detailedErrorText, requestDetailsText, requestHeadersText, responseBodyText} from "../src/diagnostics";
+import {
+    detailedErrorText,
+    redact,
+    requestDetailsText,
+    requestHeadersText,
+    responseBodyText,
+    responseHeadersText,
+} from "../src/diagnostics";
 import {providerError} from "../src/providers/helpers";
 import {withMetrics} from "../src/providers/monitoring";
 import {tencentCos} from "../src/providers/tencent-cos";
 import type {DataSource} from "../src/config";
+import {errorSummary} from "../src/format";
 
 describe("error diagnostics", () => {
     it("preserves provider codes, request IDs, headers and the complete body", () => {
@@ -122,5 +130,34 @@ describe("error diagnostics", () => {
         expect(details).not.toContain("AKID_IN_URL");
         expect(details).not.toContain("sig%3D");
         expect(details).toContain("oss-cn-hangzhou.aliyuncs.com");
+    });
+
+    it("redacts sensitive response headers as well as request headers", () => {
+        const headers = responseHeadersText({
+            "set-cookie": ["session=do-not-expose"],
+            "x-auth-token": ["token-value"],
+            "x-request-id": ["request-123"],
+        });
+        expect(headers).toContain("request-123");
+        expect(headers).not.toContain("do-not-expose");
+        expect(headers).not.toContain("token-value");
+        expect(responseHeadersText(null)).toBe("null");
+    });
+
+    it("redacts OSS, OBS and QBox authorization tokens and Huawei Access keys", () => {
+        expect(redact("Authorization: OBS AKIAEXAMPLE:Zm9vYmFy")).not.toContain("AKIAEXAMPLE");
+        expect(redact("Authorization: OSS AKEXAMPLE:c2lnbmF0dXJl")).not.toContain("AKEXAMPLE");
+        expect(redact("Authorization: QBox AKQINIU:c2ln")).not.toContain("AKQINIU");
+        expect(redact("SDK-HMAC-SHA256 Access=HUAWEIAK, SignedHeaders=host, Signature=abcd"))
+            .not.toContain("HUAWEIAK");
+        // 普通正文里的方案名不能被当成凭据抹掉
+        expect(redact("Unexpected OSS response: missing BucketStat")).toContain("Unexpected OSS response");
+        expect(redact("Unexpected OBS response: missing root")).toContain("Unexpected OBS response");
+    });
+
+    it("summarizes errors without leaking credentials", () => {
+        const error = new Error('request failed: {"secretKey":"do-not-expose"}');
+        expect(errorSummary(error)).not.toContain("do-not-expose");
+        expect(errorSummary("Authorization: Bearer abc.def.ghi")).not.toContain("abc.def.ghi");
     });
 });
