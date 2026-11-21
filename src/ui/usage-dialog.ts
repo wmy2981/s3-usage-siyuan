@@ -83,6 +83,13 @@ export class UsageDialog {
      * 否则旧请求会把已经作废的数据写回结果表并画到新卡片上。
      */
     private queryEpoch = 0;
+    /**
+     * 在途那一轮查询持有的代次；没有在途查询时为空。
+     *
+     * 与 `querying` 分开记：`dropResults()` 让旧一轮作废后新一轮必须能立刻接手，
+     * 而旧一轮结束时不能再把已经接班的新一轮标成「空闲」。
+     */
+    private activeEpoch?: number;
     private testing = false;
     private testResults?: SourceTestResult[];
     /** 移动端抽屉的清理函数；桌面端为空。 */
@@ -843,6 +850,10 @@ export class UsageDialog {
         this.queryEpoch += 1;
         this.results.clear();
         this.testResults = undefined;
+        // 在途的那一轮已经作废，立刻交出「查询中」的占用：否则调用方紧随其后的
+        // refreshAll() 会被互斥锁挡住，界面停在骨架屏上等一个永远不写结果的任务。
+        this.activeEpoch = undefined;
+        this.querying = false;
     }
 
     /** 清掉已持久化的凭据，但保留数据源本身；用户需要重新填写才能继续查询。 */
@@ -1096,6 +1107,7 @@ export class UsageDialog {
             }
         }
         this.querying = true;
+        this.activeEpoch = epoch;
         try {
             if (tasks.length > 0) {
                 let next = 0;
@@ -1115,10 +1127,14 @@ export class UsageDialog {
                 }
             }
         } finally {
+            // 只有仍持有这一轮的调用才能复位：已作废的旧一轮结束时不能再把接了班的新一轮标成空闲；
             // 一个桶都没有时（例如只导入了当前不可用的思源配置）也必须复位，
             // 否则刷新按钮与自动刷新会一直卡在「查询中」。
-            this.querying = false;
-            this.syncRefreshButton();
+            if (this.activeEpoch === epoch) {
+                this.activeEpoch = undefined;
+                this.querying = false;
+                this.syncRefreshButton();
+            }
         }
     }
 
