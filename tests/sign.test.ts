@@ -30,6 +30,35 @@ describe("signing", () => {
         );
     });
 
+    it("merges case-variant headers instead of signing the same name twice", async () => {
+        const headers = await signAwsV4({
+            method: "GET",
+            url: "https://monitoring.us-east-1.amazonaws.com/",
+            headers: {"Host": "evil.example.com", "X-Amz-Date": "20200101T000000Z", "Content-Type": "application/json"},
+            service: "monitoring",
+            region: "us-east-1",
+            accessKey: "AKIDEXAMPLE",
+            secretKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+            date: fixedDate,
+        });
+        const signedHeaders = headers.Authorization.split("SignedHeaders=")[1].split(",")[0].split(";");
+        expect(new Set(signedHeaders).size).toBe(signedHeaders.length);
+        expect(signedHeaders).toEqual(["content-type", "host", "x-amz-content-sha256", "x-amz-date"]);
+        expect(Object.keys(headers).filter((name) => name.toLowerCase() === "host")).toEqual(["host"]);
+        expect(headers.host).toBe("monitoring.us-east-1.amazonaws.com");
+
+        const huawei = await signHuaweiSdk({
+            method: "GET",
+            url: "https://ces.cn-north-4.myhuaweicloud.com/V1.0/project-id/metric-data",
+            headers: {"Content-Type": "application/json", "Host": "evil.example.com"},
+            accessKey: "AK",
+            secretKey: "SK",
+            date: fixedDate,
+        });
+        expect(huawei.Authorization).toContain("SignedHeaders=content-type;host;x-sdk-date");
+        expect(Object.keys(huawei).filter((name) => name.toLowerCase() === "host")).toEqual(["host"]);
+    });
+
     it("derives a stable OSS V4 signing key", async () => {
         // 官方示例里的 SK 是脱敏占位符，SigningKey 无法复现；这里用固定输入做回归
         expect(await ossV4SigningKey("yourAccessKeySecret", "20250411", "cn-hangzhou"))
