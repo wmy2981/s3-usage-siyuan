@@ -133,6 +133,11 @@ export class UsageDialog {
             content: '<div class="b3-dialog__content"><div class="s3u"></div><div class="s3u__live" role="status" aria-live="polite" aria-atomic="true"></div></div>',
             containerClassName: DIALOG_CLASS,
             destroyCallback: () => {
+                // 点关闭按钮、按 Esc、点遮罩都只走宿主的这个回调，不经过 destroy()：
+                // 代次必须在这里推进，否则在途请求的旧结果会写进下一次打开的对话框
+                this.queryEpoch += 1;
+                this.activeEpoch = undefined;
+                this.querying = false;
                 this.disposeDrawer?.();
                 this.disposeDrawer = undefined;
                 this.stopTimer();
@@ -176,8 +181,7 @@ export class UsageDialog {
 
     destroy(): void {
         this.stopTimer();
-        // 关闭之后返回的请求不能再写结果，否则重开对话框会先闪一帧旧数据
-        this.queryEpoch += 1;
+        // 作废在途请求的活统一由 destroyCallback 承担：它一定会被 dialog.destroy() 触发
         this.dialog?.destroy();
         this.dialog = undefined;
         this.root = undefined;
