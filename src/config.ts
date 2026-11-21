@@ -86,6 +86,10 @@ export const DEFAULT_TEST_TIMEOUT_SECONDS = 5;
 export const MIN_TEST_TIMEOUT_SECONDS = 1;
 export const MAX_TEST_TIMEOUT_SECONDS = 60;
 
+/** 传输层钳制范围（毫秒）：查询与连接检查共用同一层转发，必须覆盖 1–300 秒两端。 */
+export const MIN_TRANSPORT_TIMEOUT_MS = MIN_TEST_TIMEOUT_SECONDS * 1000;
+export const MAX_TRANSPORT_TIMEOUT_MS = MAX_TIMEOUT_SECONDS * 1000;
+
 /** 自动刷新只提供固定档位，避免用户填出 1 分钟这种会打满监控接口的值。 */
 export const REFRESH_MINUTES_OPTIONS = [0, 5, 10, 30] as const;
 

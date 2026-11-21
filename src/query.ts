@@ -4,7 +4,7 @@
  * 这里负责三件事：解析「使用思源 S3 同步配置」的实时凭据、选适配器、把底层错误
  * 归类成界面能说清楚的几类（网络没送达 / 认证失败 / 服务商报错 / 配置不全）。
  */
-import {detectProvider, readSyncS3Config, type DataSource} from "./config";
+import {detectProvider, MIN_TEST_TIMEOUT_SECONDS, readSyncS3Config, type DataSource} from "./config";
 import {ForwardError, forward} from "./net";
 import {diagnosticSection, detailedErrorText} from "./diagnostics";
 import {providerFor} from "./providers/registry";
@@ -102,12 +102,14 @@ export async function queryBucket(
     if (meta.accountIdRequired && effective.accountId.trim() === "") {
         throw configError("Account ID is required");
     }
+    // 连接检查的最小值是 1 秒，查询的最大值是 300 秒：这里只兜住非法值，不做额外收紧
+    const timeoutMs = Math.max(MIN_TEST_TIMEOUT_SECONDS, timeoutSeconds) * 1000;
     try {
         return await providerFor(effective.provider).query({
             source: effective,
             bucket: bucket.trim(),
-            timeoutMs: Math.max(5, timeoutSeconds) * 1000,
-            request: (request) => forward(request, Math.max(5, timeoutSeconds) * 1000),
+            timeoutMs,
+            request: (request) => forward(request, timeoutMs),
         });
     } catch (error) {
         const context = withQueryContext(error, effective, bucket.trim(), timeoutSeconds);
