@@ -54,6 +54,29 @@ describe("Tencent COS monitoring requests", () => {
         }
         expect(usage.storageBytes).toBeUndefined();
     });
+
+    it("keeps the business error code when the provider answers 200", async () => {
+        let error: {code?: string; message?: string} | undefined;
+        try {
+            await tencentCos.query({
+                source: source(), bucket: "photos-1250000000", timeoutMs: 5000,
+                request: async () => ({
+                    status: 200,
+                    body: JSON.stringify({Response: {
+                        Error: {Code: "AuthFailure.SignatureFailure", Message: "signature mismatch"},
+                        RequestId: "request-123",
+                    }}),
+                    headers: null,
+                }),
+            });
+        } catch (reason) {
+            error = reason as {code?: string; message?: string};
+        }
+        // 200 响应体里的业务错误也要带出错误码，认证类失败才能被归类
+        expect(error?.code).toBe("AuthFailure.SignatureFailure");
+        expect(error?.message).toContain("AuthFailure.SignatureFailure: signature mismatch");
+        expect(error?.message).toContain("Response body");
+    });
 });
 
 /** 按腾讯云 TC3 文档独立重算一次签名，确认签的就是实际发送的 body。 */

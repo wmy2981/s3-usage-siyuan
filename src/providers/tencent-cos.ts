@@ -7,7 +7,7 @@
  */
 import {mapLimit} from "../async";
 import {signTc3} from "../sign/tencent-tc3";
-import {diagnosticSection, requestSection} from "../diagnostics";
+import {diagnosticSection, requestSection, responseBodyText} from "../diagnostics";
 import {asNumber, jsonPath} from "../xml";
 import {cosAppId, providerError, requireAccessKey, requireSecretKey} from "./helpers";
 import {MONITOR_WINDOW_MS, sumDefined, withMetrics} from "./monitoring";
@@ -97,14 +97,18 @@ export function summedCosPoint(payload: unknown): MetricPoint {
     return total === undefined ? {} : {value: total, timestamp: timestamp > 0 ? timestamp : undefined};
 }
 
-function errorOf(payload: unknown): string {
+/** 200 响应体里的业务错误：错误码要单独带出去，认证类失败靠它归类。 */
+function errorOf(payload: unknown): {code: string; message: string} {
     const error = jsonPath(payload, "Response", "Error");
     if (!error || typeof error !== "object") {
-        return "";
+        return {code: "", message: ""};
     }
     const code = jsonPath(error, "Code");
     const message = jsonPath(error, "Message");
-    return [code, message].filter((item) => typeof item === "string" && item !== "").join(": ");
+    return {
+        code: typeof code === "string" ? code.trim() : "",
+        message: [code, message].filter((item) => typeof item === "string" && item !== "").join(": "),
+    };
 }
 
 /** 腾讯云文档与 SDK 都使用不带毫秒的 RFC3339 时间（`2020-11-24T15:15:50+08:00`）。 */
@@ -165,11 +169,11 @@ async function getMetric(
         error.message += diagnosticSection("Operation", context());
         throw error;
     }
-    const message = errorOf(parsed);
-    if (message !== "") {
-        throw new ProviderError(`${message}${diagnosticSection("Response body", response.body || "(empty response body)")}` +
+    const business = errorOf(parsed);
+    if (business.message !== "") {
+        throw new ProviderError(`${business.message}${diagnosticSection("Response body", responseBodyText(response.body))}` +
             requestSection(response) +
-            diagnosticSection("Operation", context()));
+            diagnosticSection("Operation", context()), {code: business.code});
     }
     return options.sum === true ? summedCosPoint(parsed) : latestPoint(parsed);
 }

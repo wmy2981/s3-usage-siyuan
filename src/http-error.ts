@@ -23,7 +23,9 @@ export function serverErrorText(status: number, body: string): string {
     if (json && typeof json === "object") {
         const record = json as Record<string, unknown>;
         const response = record.Response as Record<string, unknown> | undefined;
-        const error = (response?.Error ?? record.error ?? record) as Record<string, unknown>;
+        // 火山引擎把错误放在 ResponseMetadata.Error 里，腾讯云放在 Response.Error 里
+        const metadata = record.ResponseMetadata as Record<string, unknown> | undefined;
+        const error = (response?.Error ?? metadata?.Error ?? record.error ?? record) as Record<string, unknown>;
         const message = error.Message ?? error.message ?? record.message ?? record.msg;
         if (typeof message === "string" && message.trim() !== "") {
             return `HTTP ${status}: ${message.trim()}`;
@@ -41,7 +43,8 @@ export function serverErrorText(status: number, body: string): string {
 }
 
 /**
- * 从错误体里取服务商错误码：XML 用 `<Code>`，JSON 用 `Code`/`code`。
+ * 从错误体里取服务商错误码：XML 用 `<Code>`，JSON 用 `Code`/`code`
+ * （腾讯云在 `Response.Error`，火山引擎在 `ResponseMetadata.Error`）。
  *
  * 只给归类用；展示仍然走 `serverErrorText`，两者都不含请求头。
  */
@@ -54,7 +57,8 @@ export function serverErrorCode(body: string): string {
     if (json && typeof json === "object") {
         const record = json as Record<string, unknown>;
         const response = record.Response as Record<string, unknown> | undefined;
-        const error = (response?.Error ?? record.error ?? record) as Record<string, unknown>;
+        const metadata = record.ResponseMetadata as Record<string, unknown> | undefined;
+        const error = (response?.Error ?? metadata?.Error ?? record.error ?? record) as Record<string, unknown>;
         const code = error.Code ?? error.code ?? record.code;
         return typeof code === "string" ? code.trim() : "";
     }
