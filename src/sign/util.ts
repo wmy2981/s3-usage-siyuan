@@ -161,13 +161,3 @@ export function stringField(value: unknown, key: string): string {
     const field = (value as Record<string, unknown>)[key];
     return typeof field === "string" ? field : "";
 }
-
-/** 解析数字字段；缺失/非法时返回 undefined，而不是 0。 */
-export function numberField(value: unknown, key: string): number | undefined {
-    if (!value || typeof value !== "object") {
-        return undefined;
-    }
-    const field = (value as Record<string, unknown>)[key];
-    const parsed = typeof field === "number" ? field : Number(field);
-    return Number.isFinite(parsed) ? parsed : undefined;
-}
