@@ -76,6 +76,13 @@ export class UsageDialog {
     private editing?: DataSource;
     private adding = false;
     private querying = false;
+    /**
+     * 请求代次：保存、删除、重载或关闭对话框都会递增。
+     *
+     * 在途请求返回时如果代次已经变了，这份结果就属于旧配置，必须丢弃；
+     * 否则旧请求会把已经作废的数据写回结果表并画到新卡片上。
+     */
+    private queryEpoch = 0;
     private testing = false;
     private testResults?: SourceTestResult[];
     /** 移动端抽屉的清理函数；桌面端为空。 */
@@ -162,6 +169,8 @@ export class UsageDialog {
 
     destroy(): void {
         this.stopTimer();
+        // 关闭之后返回的请求不能再写结果，否则重开对话框会先闪一帧旧数据
+        this.queryEpoch += 1;
         this.dialog?.destroy();
         this.dialog = undefined;
         this.root = undefined;
@@ -184,7 +193,7 @@ export class UsageDialog {
     /** 同步配置被其他窗口改写后重新载入，不重建对话框。 */
     async reload(): Promise<void> {
         this.settings = await this.onReload();
-        this.results.clear();
+        this.dropResults();
         this.render();
         if (this.view === "usage") {
             void this.refreshAll();
@@ -829,8 +838,9 @@ export class UsageDialog {
         void this.refreshAll();
     }
 
-    /** 数据源变了，卡片结果与测试结果都作废。 */
+    /** 数据源变了，卡片结果与测试结果都作废，在途请求的结果也一并作废。 */
     private dropResults(): void {
+        this.queryEpoch += 1;
         this.results.clear();
         this.testResults = undefined;
     }
@@ -1013,17 +1023,24 @@ export class UsageDialog {
 
     private async queryOne(source: DataSource, bucket: string): Promise<void> {
         const key = this.cardKey(source, bucket);
+        const epoch = this.queryEpoch;
         this.results.set(key, {state: "loading", fetchedAt: Date.now()});
         this.updateCard(source, bucket);
+        let result: BucketResult;
         try {
             const usage = await queryBucket(source, bucket, this.settings.timeoutSeconds);
-            this.results.set(key, {state: "ok", usage, fetchedAt: Date.now()});
+            result = {state: "ok", usage, fetchedAt: Date.now()};
         } catch (error) {
             const normalized = error instanceof QueryError
                 ? {kind: error.kind, message: error.message}
                 : {kind: "provider" as const, message: errorText(error)};
-            this.results.set(key, {state: "error", error: normalized, fetchedAt: Date.now()});
+            result = {state: "error", error: normalized, fetchedAt: Date.now()};
         }
+        // 期间数据源被改过（保存、删除、重载）或对话框已关闭：这份结果已经过期
+        if (epoch !== this.queryEpoch) {
+            return;
+        }
+        this.results.set(key, result);
         this.updateCard(source, bucket);
     }
 
@@ -1071,33 +1088,48 @@ export class UsageDialog {
 
     /** 查询任务本身不重建正文，只更新单张卡片；调用方负责先把骨架画出来。 */
     private async runQueries(): Promise<void> {
+        const epoch = this.queryEpoch;
         const tasks: {source: DataSource; bucket: string}[] = [];
         for (const source of this.settings.sources) {
             for (const bucket of source.buckets) {
                 tasks.push({source, bucket});
             }
         }
-        if (tasks.length === 0) {
+        this.querying = true;
+        try {
+            if (tasks.length > 0) {
+                let next = 0;
+                const worker = async () => {
+                    while (next < tasks.length) {
+                        const task = tasks[next++];
+                        await this.queryOne(task.source, task.bucket);
+                    }
+                };
+                await Promise.all([worker(), worker()]);
+                if (epoch === this.queryEpoch) {
+                    const failed = tasks.filter((task) =>
+                        this.results.get(this.cardKey(task.source, task.bucket))?.state === "error").length;
+                    this.announce(failed === 0
+                        ? this.t("querySummaryOk", {count: tasks.length})
+                        : this.t("querySummaryFailed", {ok: tasks.length - failed, failed}));
+                }
+            }
+        } finally {
+            // 一个桶都没有时（例如只导入了当前不可用的思源配置）也必须复位，
+            // 否则刷新按钮与自动刷新会一直卡在「查询中」。
+            this.querying = false;
+            this.syncRefreshButton();
+        }
+    }
+
+    /** 刷新按钮只反映「是否正在查询」与「有没有数据源」；其他视图里有同名样式按钮，不能误改。 */
+    private syncRefreshButton(): void {
+        if (this.view !== "usage") {
             return;
         }
-        this.querying = true;
-        let next = 0;
-        const worker = async () => {
-            while (next < tasks.length) {
-                const task = tasks[next++];
-                await this.queryOne(task.source, task.bucket);
-            }
-        };
-        await Promise.all([worker(), worker()]);
-        this.querying = false;
-        const failed = tasks.filter((task) =>
-            this.results.get(this.cardKey(task.source, task.bucket))?.state === "error").length;
-        this.announce(failed === 0
-            ? this.t("querySummaryOk", {count: tasks.length})
-            : this.t("querySummaryFailed", {ok: tasks.length - failed, failed}));
         const refresh = this.root?.querySelector<HTMLButtonElement>(".s3u__toolbar-actions .b3-button");
         if (refresh) {
-            refresh.disabled = this.settings.sources.length === 0;
+            refresh.disabled = this.querying || this.settings.sources.length === 0;
         }
     }
 
