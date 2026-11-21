@@ -969,12 +969,16 @@ export class UsageDialog {
         this.testResults = undefined;
         this.render();
         const results: SourceTestResult[] = [];
-        for (const source of this.settings.sources) {
-            results.push(await this.testOneSource(source));
+        try {
+            for (const source of this.settings.sources) {
+                results.push(await this.testOneSource(source));
+            }
+            this.testResults = results;
+        } finally {
+            // 非预期异常也要解锁「测试中」，否则测试按钮会一直停在禁用态
+            this.testing = false;
+            this.render();
         }
-        this.testResults = results;
-        this.testing = false;
-        this.render();
     }
 
     /** 连接检查：一个源的所有桶都查一次，按源汇总。 */
