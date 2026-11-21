@@ -221,6 +221,10 @@ describe("provider parsers", () => {
         expect(metrics.trafficOutBytes).toBe(2048);
         expect(metrics.requestCount).toBe(7);
         expect(parseMinioMetrics(body, "missing")).toEqual({});
+        // 没有 bucket 标签的样本属于集群级汇总：只允许 v3 单桶端点把它算进本桶
+        const cluster = 'minio_bucket_traffic_received_bytes 4096\nminio_bucket_requests_total{api="Put"} 9';
+        expect(parseMinioMetrics(cluster, "photos")).toEqual({});
+        expect(parseMinioMetrics(cluster, "photos", true).trafficInBytes).toBe(4096);
     });
 
     it("parses AWS request metric series and FilterId dimensions", () => {

@@ -138,11 +138,14 @@ const REQUESTS = ["minio_bucket_requests_total", "minio_bucket_requests_ttfb_sec
  * 这些是「自进程启动以来」的累计值（v2 是 gauge、v3 是 counter），不是 24 小时窗口，
  * 界面上必须靠 notes 说明，否则会被当成区间用量。
  */
-export function parseMinioMetrics(body: string, bucket: string): MetricsPart {
+export function parseMinioMetrics(body: string, bucket: string, allowUnlabeledBucket = false): MetricsPart {
     const samples = parsePrometheusText(body);
+    // 集群级端点也会返回不带 bucket 标签的聚合样本；把它们算进某个桶会把整个集群的
+    // 流量记到这一个桶上。只有 v3 单桶端点才允许缺省标签。
+    const inBucket = (sample: PrometheusSample): boolean =>
+        sample.labels.bucket === bucket || (allowUnlabeledBucket && sample.labels.bucket === undefined);
     const sumOf = (name: string) => sumDefined(samples
-        .filter((sample) => sample.name === name &&
-            (sample.labels.bucket === undefined || sample.labels.bucket === bucket))
+        .filter((sample) => sample.name === name && inBucket(sample))
         .map((sample) => sample.value));
     // 同一含义的不同指标名只会命中一个，逐个试，避免把两套名字加起来翻倍
     const pick = (names: string[]) => {
@@ -161,8 +164,14 @@ export function parseMinioMetrics(body: string, bucket: string): MetricsPart {
     };
 }
 
-/** 抓取指标端点：先试 v2，404 时退回 v3；JWT 被拒时再试匿名（公开指标）模式。 */
-async function fetchMetrics(ctx: Parameters<ProviderDefinition["query"]>[0]): Promise<string> {
+/**
+ * 抓取指标端点：先试 v2，404 时退回 v3；JWT 被拒时再试匿名（公开指标）模式。
+ *
+ * `scoped` 表示这次抓的是 v3 单桶端点：只有它返回的样本可以不带 bucket 标签。
+ */
+async function fetchMetrics(
+    ctx: Parameters<ProviderDefinition["query"]>[0],
+): Promise<{body: string; scoped: boolean}> {
     const endpoint = requireEndpoint(ctx.source);
     const token = await minioMetricsToken(
         requireAccessKey(ctx.source),
@@ -182,13 +191,15 @@ async function fetchMetrics(ctx: Parameters<ProviderDefinition["query"]>[0]): Pr
         return ctx.request({url, method: "GET", headers: {}, contentType: "text/plain"});
     };
     let response = await scrape(`${endpoint}/minio/v2/metrics/bucket`);
+    let scoped = false;
     if (response.status === 404) {
         response = await scrape(`${endpoint}/minio/metrics/v3/bucket/api/${encodeURIComponent(ctx.bucket)}`);
+        scoped = true;
     }
     if (response.status !== 200) {
         throw providerError(response);
     }
-    return response.body;
+    return {body: response.body, scoped};
 }
 
 export const minio: ProviderDefinition = {
@@ -211,7 +222,10 @@ export const minio: ProviderDefinition = {
         const usage = parseMinioUsage(response.body, ctx.bucket);
         const notes = ["noteMinioRealtime"];
         const errors: string[] = [];
-        const metrics = await withMetrics(async () => parseMinioMetrics(await fetchMetrics(ctx), ctx.bucket), errors);
+        const metrics = await withMetrics(async () => {
+            const scraped = await fetchMetrics(ctx);
+            return parseMinioMetrics(scraped.body, ctx.bucket, scraped.scoped);
+        }, errors);
         if (metrics.trafficInBytes !== undefined || metrics.trafficOutBytes !== undefined || metrics.requestCount !== undefined) {
             notes.push("noteMinioCumulative");
         }
