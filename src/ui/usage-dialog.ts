@@ -789,7 +789,7 @@ export class UsageDialog {
             this.settings = await this.onSave({...this.settings, testTimeoutSeconds});
             showMessage(this.t("settingsSaved"), 2000, "info");
         } catch (error) {
-            showMessage(this.t("sourceTestFailed", {message: errorSummary(error)}), 5000, "error");
+            showMessage(this.t("sourceSaveFailed", {message: errorSummary(error)}), 5000, "error");
             this.render();
         }
     }
