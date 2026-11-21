@@ -106,13 +106,6 @@ async function cesSeries(
 
 export const huaweiObs: ProviderDefinition = {
     id: "huaweiObs",
-    labelKey: "providerHuaweiObs",
-    endpointRequired: true,
-    regionRequired: false,
-    accountIdRequired: false,
-    accessKeyLabelKey: "providerHuaweiObsToken",
-    secretKeyRequired: true,
-    bucketHintKey: "sourceBucketPlaceholder",
     async query(ctx) {
         const {source, bucket, request} = ctx;
         const endpoint = requireEndpoint(source);

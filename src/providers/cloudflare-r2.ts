@@ -109,13 +109,6 @@ export function parseR2Usage(payload: unknown): BucketUsage {
 
 export const cloudflareR2: ProviderDefinition = {
     id: "cloudflareR2",
-    labelKey: "providerCloudflareR2",
-    endpointRequired: false,
-    regionRequired: false,
-    accountIdRequired: true,
-    accessKeyLabelKey: "providerCloudflareR2Token",
-    secretKeyRequired: false,
-    bucketHintKey: "sourceBucketPlaceholder",
     async query({source, bucket, request}) {
         const accountTag = requireAccountId(source);
         const end = new Date();

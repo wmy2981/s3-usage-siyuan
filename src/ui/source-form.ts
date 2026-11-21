@@ -212,11 +212,20 @@ export class SourceForm {
         return meta.accountIdRequired || meta.accountIdOptional === true;
     }
 
+    /** Endpoint / 地域一栏：必填固然显示，标注为可选的也要显示，否则那些参数根本填不进去。 */
+    private endpointVisible(meta: ProviderMeta): boolean {
+        return meta.endpointRequired || meta.endpointOptional === true;
+    }
+
+    private regionVisible(meta: ProviderMeta): boolean {
+        return meta.regionRequired || meta.regionOptional === true;
+    }
+
     /** 只改可见性，不销毁控件；隐藏的字段仍然保留用户输入。 */
     private applyProviderVisibility(): void {
         const meta = PROVIDER_META[this.draft.provider];
-        this.endpointRow.hidden = !meta.endpointRequired;
-        this.regionRow.hidden = !meta.regionRequired;
+        this.endpointRow.hidden = !this.endpointVisible(meta);
+        this.regionRow.hidden = !this.regionVisible(meta);
         this.accountRow.hidden = !this.accountVisible(meta);
         const accountLabel = this.accountRow.firstElementChild;
         if (accountLabel instanceof HTMLElement) {

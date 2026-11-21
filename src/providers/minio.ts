@@ -204,13 +204,6 @@ async function fetchMetrics(
 
 export const minio: ProviderDefinition = {
     id: "minio",
-    labelKey: "providerMinio",
-    endpointRequired: true,
-    regionRequired: false,
-    accountIdRequired: false,
-    accessKeyLabelKey: "providerMinioToken",
-    secretKeyRequired: true,
-    bucketHintKey: "sourceBucketPlaceholder",
     async query(ctx) {
         let response = await requestUsage(ctx, "/minio/admin/v3/datausageinfo");
         if (response.status === 404) {

@@ -194,13 +194,6 @@ async function queryTraffic(
 
 export const volcanoTos: ProviderDefinition = {
     id: "volcanoTos",
-    labelKey: "providerVolcanoTos",
-    endpointRequired: true,
-    regionRequired: true,
-    accountIdRequired: false,
-    accessKeyLabelKey: "providerVolcanoTosToken",
-    secretKeyRequired: true,
-    bucketHintKey: "sourceBucketPlaceholder",
     async query(ctx) {
         const {source, bucket, request} = ctx;
         const endpoint = requireEndpoint(source);

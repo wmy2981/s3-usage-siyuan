@@ -215,13 +215,6 @@ async function queryTraffic(
 
 export const qiniuKodo: ProviderDefinition = {
     id: "qiniuKodo",
-    labelKey: "providerQiniuKodo",
-    endpointRequired: false,
-    regionRequired: false,
-    accountIdRequired: false,
-    accessKeyLabelKey: "providerQiniuKodoToken",
-    secretKeyRequired: true,
-    bucketHintKey: "sourceBucketPlaceholder",
     async query(ctx) {
         const endpoint = endpointFor(ctx.source);
         const notes = ["noteQiniuDelay"];

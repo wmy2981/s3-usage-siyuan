@@ -138,13 +138,6 @@ async function cmsMetric(
 
 export const aliyunOss: ProviderDefinition = {
     id: "aliyunOss",
-    labelKey: "providerAliyunOss",
-    endpointRequired: true,
-    regionRequired: false,
-    accountIdRequired: false,
-    accessKeyLabelKey: "providerAliyunOssToken",
-    secretKeyRequired: true,
-    bucketHintKey: "sourceBucketPlaceholder",
     async query(ctx) {
         const {source, bucket, request} = ctx;
         const endpoint = requireEndpoint(source);

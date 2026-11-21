@@ -240,13 +240,6 @@ async function sumRequestMetric(
 
 export const awsS3: ProviderDefinition = {
     id: "awsS3",
-    labelKey: "providerAwsS3",
-    endpointRequired: false,
-    regionRequired: true,
-    accountIdRequired: false,
-    accessKeyLabelKey: "providerAwsS3Token",
-    secretKeyRequired: true,
-    bucketHintKey: "sourceBucketPlaceholder",
     async query(ctx) {
         // 12 个存储类 + 对象数：串行要跨网往返十几次，单桶就能耗十几秒；按 4 条并发压成几轮。
         const storageResults = await mapLimit(STORAGE_TYPES, 4, async (storageType) => {

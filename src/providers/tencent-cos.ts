@@ -176,13 +176,6 @@ async function getMetric(
 
 export const tencentCos: ProviderDefinition = {
     id: "tencentCos",
-    labelKey: "providerTencentCos",
-    endpointRequired: false,
-    regionRequired: true,
-    accountIdRequired: false,
-    accessKeyLabelKey: "providerTencentCosToken",
-    secretKeyRequired: true,
-    bucketHintKey: "sourceBucketPlaceholder",
     async query(ctx) {
         // 地域只影响桶的归属，云监控请求固定走广州；这里校验地域只是防止用户漏填桶名后缀
         if (ctx.source.region.trim() === "" && !/-\d+$/.test(ctx.bucket)) {
