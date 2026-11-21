@@ -2,7 +2,7 @@
   "name": "s3-usage-siyuan",
   "author": "wmy2981",
   "url": "https://github.com/wmy2981/s3-usage-siyuan",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minAppVersion": "3.1.20",
   "backends": [
     "all"

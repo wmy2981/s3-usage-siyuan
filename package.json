@@ -1,6 +1,6 @@
 {
   "name": "s3-usage-siyuan",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "View object storage bucket usage in SiYuan",
   "type": "module",
   "private": true,
