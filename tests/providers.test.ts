@@ -56,6 +56,26 @@ describe("Tencent COS monitoring requests", () => {
         expect(usage.storageBytes).toBeUndefined();
     });
 
+    it("adds the APPID to a bare bucket name and works without a region", async () => {
+        const requests: ForwardRequest[] = [];
+        await tencentCos.query({
+            source: {...source(), buckets: ["photos"], region: "", accountId: "1250000000"},
+            bucket: "photos", timeoutMs: 5000,
+            request: async (request) => {
+                requests.push(request);
+                return {status: 200, body: JSON.stringify({Response: {DataPoints: []}}), headers: null};
+            },
+        });
+        expect(requests).toHaveLength(14);
+        for (const request of requests) {
+            const payload = JSON.parse(request.body ?? "{}") as {
+                Instances: {Dimensions: {Name: string; Value: string}[]}[];
+            };
+            // 云监控的 bucket 维度必须是带 APPID 的完整桶名
+            expect(payload.Instances[0].Dimensions[1]).toEqual({Name: "bucket", Value: "photos-1250000000"});
+        }
+    });
+
     it("keeps the business error code when the provider answers 200", async () => {
         let error: {code?: string; message?: string} | undefined;
         try {

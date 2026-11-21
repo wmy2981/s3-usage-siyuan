@@ -54,7 +54,9 @@ export const PROVIDER_META: Record<ProviderId, ProviderMeta> = {
         labelKey: "providerTencentCos",
         docsUrl: "https://cloud.tencent.com/document/product/598/40488",
         endpointRequired: false,
-        regionRequired: true,
+        // 云监控固定走广州，地域对查询没有影响，只保留给用户备注归属
+        regionRequired: false,
+        regionOptional: true,
         accountIdRequired: false,
         accessKeyLabelKey: "providerTencentCosToken",
         secretKeyLabelKey: "providerTencentCosSecret",

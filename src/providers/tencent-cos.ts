@@ -111,6 +111,15 @@ function errorOf(payload: unknown): {code: string; message: string} {
     };
 }
 
+/**
+ * 云监控的 bucket 维度是带 APPID 的完整桶名（文档示例 `examplebucket-1250000000`）。
+ *
+ * 用户只填裸桶名时按 APPID 补后缀：否则维度匹配不到任何实例，容量和流量全为空。
+ */
+function bucketDimension(bucket: string, appId: string): string {
+    return bucket.endsWith(`-${appId}`) ? bucket : `${bucket}-${appId}`;
+}
+
 /** 腾讯云文档与 SDK 都使用不带毫秒的 RFC3339 时间（`2020-11-24T15:15:50+08:00`）。 */
 function isoSecond(date: Date): string {
     return date.toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -132,7 +141,7 @@ async function getMetric(
         Instances: [{
             Dimensions: [
                 {Name: "appid", Value: appId},
-                {Name: "bucket", Value: bucket},
+                {Name: "bucket", Value: bucketDimension(bucket, appId)},
             ],
         }],
         StartTime: isoSecond(start),
@@ -181,10 +190,7 @@ async function getMetric(
 export const tencentCos: ProviderDefinition = {
     id: "tencentCos",
     async query(ctx) {
-        // 地域只影响桶的归属，云监控请求固定走广州；这里校验地域只是防止用户漏填桶名后缀
-        if (ctx.source.region.trim() === "" && !/-\d+$/.test(ctx.bucket)) {
-            throw new ProviderError("Region is required");
-        }
+        // 云监控请求固定走广州，地域对查询没有影响：桶归属与 APPID 都从桶名或 Account ID 里取
         const appId = cosAppId(ctx.source, ctx.bucket);
         const storagePoints = await mapLimit(STORAGE_SPECS, 4, (spec) => getMetric(ctx, spec.metric, ctx.bucket, appId));
         const objectPoints = await mapLimit(
