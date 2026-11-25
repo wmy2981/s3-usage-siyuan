@@ -14,3 +14,4 @@ playwright-report/
 core
 core.*
 e2e-*.mjs
+.local/
