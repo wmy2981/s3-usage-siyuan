@@ -161,6 +161,43 @@ describe("settings store", () => {
         }
     });
 
+    it("stores the provider chosen for the siyuan entry", async () => {
+        const host = globalThis as {window?: unknown};
+        const original = host.window;
+        host.window = {
+            siyuan: {
+                config: {
+                    sync: {
+                        provider: 2,
+                        s3: {
+                            endpoint: "oss-cn-hangzhou.aliyuncs.com",
+                            bucket: "sync-bucket",
+                            accessKey: "SYNC_AK",
+                            secretKey: "SYNC_SK",
+                        },
+                    },
+                },
+            },
+        };
+        try {
+            const {plugin, data} = fakePlugin();
+            const settings = settingsWithEmptyCredentials();
+            // Endpoint 是阿里云，但用户手动指定了七牛
+            settings.sources.push(siyuanRuntimeSource("我的思源", "qiniuKodo"));
+            const saved = await saveSettings(plugin, settings);
+
+            expect((data() as {siyuan?: unknown}).siyuan).toEqual({name: "我的思源", provider: "qiniuKodo"});
+            expect(saved.sources[1].provider).toBe("qiniuKodo");
+            expect(saved.sources[1].providerOverride).toBe("qiniuKodo");
+        } finally {
+            if (original === undefined) {
+                delete host.window;
+            } else {
+                host.window = original;
+            }
+        }
+    });
+
     it("drops the siyuan entry once it is removed", async () => {
         const {plugin, data} = fakePlugin();
         const settings = settingsWithEmptyCredentials();

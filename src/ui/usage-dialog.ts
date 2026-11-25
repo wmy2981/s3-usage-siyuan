@@ -14,6 +14,7 @@ import {
     MIN_TEST_TIMEOUT_SECONDS,
     MIN_TIMEOUT_SECONDS,
     REFRESH_MINUTES_OPTIONS,
+    isProviderId,
     readSyncS3Config,
     resolveSource,
     siyuanRuntimeSource,
@@ -28,7 +29,7 @@ import {
 } from "../format";
 import type {T} from "../i18n";
 import type {BucketUsage} from "../providers/types";
-import {PROVIDER_META} from "../providers/meta";
+import {PROVIDER_META, PROVIDER_ORDER} from "../providers/meta";
 import {queryBucket, QueryError} from "../query";
 import {bindMobileDrawer, isMobileFrontend} from "./drawer";
 import {clear, copyButton, el, fieldRow, iconButton, labeledIconButton} from "./dom";
@@ -583,6 +584,20 @@ export class UsageDialog {
         name.addEventListener("change", () => void this.saveSiyuanName(name.value));
         block.append(fieldRow(this.t("siyuanImportName"), name));
 
+        // 服务商默认按 Endpoint 自动识别；识别错了可以直接改，改动会落盘
+        const provider = el("select", "b3-select fn__block");
+        const auto = el("option", "", this.t("providerAuto"));
+        auto.value = "";
+        provider.append(auto);
+        for (const id of PROVIDER_ORDER) {
+            const option = el("option", "", this.t(PROVIDER_META[id].labelKey));
+            option.value = id;
+            provider.append(option);
+        }
+        provider.value = live.providerOverride ?? "";
+        provider.addEventListener("change", () => void this.saveSiyuanProvider(provider.value));
+        block.append(fieldRow(this.t("sourceProvider"), provider, this.t("siyuanImportProviderHint")));
+
         const details = el("div", "s3u__siyuan-meta");
         const line = (label: string, value: string): void => {
             const row = el("div", "s3u__siyuan-line");
@@ -592,7 +607,6 @@ export class UsageDialog {
         if (live.buckets.length === 0) {
             details.append(el("div", "s3u__siyuan-line s3u__siyuan-line--error", this.t("importMissing")));
         } else {
-            line(this.t("sourceProvider"), this.t(PROVIDER_META[live.provider].labelKey));
             line(this.t("sourceBuckets"), live.buckets.join(", "));
             line(this.t("sourceEndpoint"), live.endpoint);
             if (live.region !== "") {
@@ -602,6 +616,22 @@ export class UsageDialog {
         block.append(details);
         block.append(el("div", "s3u__hint", this.t("siyuanImportHint")));
         return block;
+    }
+
+    /** 手动指定导入数据的服务商；空值回到「自动识别」。 */
+    private async saveSiyuanProvider(provider: string): Promise<void> {
+        const sources = this.settings.sources.map((source) => source.useSyncConfig
+            ? {...source, providerOverride: isProviderId(provider) ? provider : undefined}
+            : source);
+        try {
+            this.settings = await this.onSave({...this.settings, sources});
+            // 换服务商等于换查询方式，旧结果全部作废
+            this.dropResults();
+            this.render();
+        } catch (error) {
+            showMessage(this.t("sourceSaveFailed", {message: errorSummary(error)}), 5000, "error");
+            this.render();
+        }
     }
 
     private async saveSiyuanName(name: string): Promise<void> {

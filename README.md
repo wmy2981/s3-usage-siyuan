@@ -29,7 +29,7 @@ View bucket usage of S3-compatible object storage inside SiYuan: storage size, o
 - Every error message in the UI (including provider query failures) is shown in one unified red; ordinary notes such as “data delayed” stay grey.
 - The **Test connection** button at the top right of the data sources page queries every bucket of every data source and lists the outcome per source, naming the failing buckets in red.
 - Credentials encrypted with the SiYuan **data repo key** before being written to the plugin directory; the ciphertext follows workspace sync, so another device with the same repo key can decrypt it.
-- One S3 sync configuration can be imported from SiYuan as a standalone data source: the plugin stores only the name you give it, while provider, bucket, region and credentials are read live from the SiYuan settings on every query. Importing is allowed once; afterwards the entry can only be renamed or removed.
+- One S3 sync configuration can be imported from SiYuan as a standalone data source: the plugin stores only the name you give it and the provider you pick, while bucket, region and credentials are read live from the SiYuan settings on every query. The provider is auto-detected from the endpoint by default and can be set by hand when the guess is wrong. Importing is allowed once; afterwards the entry can only be renamed, re-pointed at another provider, or removed.
 - Bilingual UI (English / Simplified Chinese), desktop and mobile.
 - On mobile (app and mobile browser) the whole dialog is a native SiYuan bottom drawer shared by every page: 70% of the viewport by default, resizable by the handle, dismissed by dragging down.
 
@@ -52,7 +52,8 @@ View bucket usage of S3-compatible object storage inside SiYuan: storage size, o
    - Alibaba Cloud OSS traffic and requests go through CloudMonitor, so the key needs `cms:QueryMetricList` (`AliyunCloudMonitorReadOnlyAccess` is enough).
    - MinIO traffic and requests come from the Prometheus metrics endpoint and need `admin:Prometheus` (or a public metrics endpoint).
 4. Save. The first query starts immediately. **Test connection** at the top right of the data sources page checks all buckets of every data source without opening the dashboard; the button in the editor checks every bucket typed into the form.
-5. To reuse the S3 configuration already saved in SiYuan, click the download icon (**Import SiYuan S3 sync configuration**) at the top right of the **Data sources** page. The button disappears after importing: the entry always follows the current SiYuan sync configuration and can only be renamed or removed (then re-imported).
+5. To reuse the S3 configuration already saved in SiYuan, click the download icon (**Import SiYuan S3 sync configuration**) at the top right of the **Data sources** page. The button disappears after importing: the entry follows the current SiYuan sync configuration and can be renamed or removed (then re-imported).
+   - **Provider** defaults to **Auto-detect (from endpoint)**: Alibaba Cloud, Tencent Cloud, Huawei Cloud, Volcano Engine, Qiniu, Cloudflare R2 and AWS S3 domains are recognized, anything else falls back to MinIO / self-hosted. Pick one by hand if the guess is wrong; the choice is saved and the entry is queried again with the new provider right away.
 
 ### Credential encryption
 

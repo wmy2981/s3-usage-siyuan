@@ -44,16 +44,24 @@ export interface DataSource extends StoredSource {
      * 落盘只留名字（见 `StoredSettings.siyuan`）。
      */
     useSyncConfig: boolean;
+    /**
+     * 「从思源导入」那一条手动指定的服务商；不填表示按 Endpoint 自动识别。
+     *
+     * 只对思源导入有意义：手动数据源直接用 provider 本身。
+     */
+    providerOverride?: ProviderId;
     /** 密文存在但解不开（仓库密钥被更换，或当前环境没有 WebCrypto）。 */
     credentialsError: boolean;
     /** 解不开的具体原因，界面据此给不同提示。 */
     credentialsErrorReason: "unreadable" | "unavailable" | "";
 }
 
-/** 从思源导入的唯一一条数据源：落盘只有用户改过的名字，其余全在运行时读。 */
+/** 从思源导入的唯一一条数据源：落盘只有用户改过的名字与手动指定的服务商，其余全在运行时读。 */
 export interface StoredSiyuanImport {
     /** 显示名；空串表示用默认名。 */
     name: string;
+    /** 手动指定的服务商；不写表示按 Endpoint 自动识别。 */
+    provider?: ProviderId;
 }
 
 export interface StoredSettings {
@@ -166,11 +174,12 @@ export function repoKeyBase64(): string {
  * 服务商、桶名、地域、凭据每次调用都重新读；思源侧改了同步配置就自动跟着变，
  * 没有可用配置时返回一条空壳，界面据此显示「思源当前没有可用的 S3 同步配置」。
  */
-export function siyuanRuntimeSource(name: string): DataSource {
+export function siyuanRuntimeSource(name: string, providerOverride?: ProviderId): DataSource {
     const base: DataSource = {
         id: SIYUAN_SOURCE_ID,
         name,
-        provider: "minio",
+        provider: providerOverride ?? "minio",
+        providerOverride,
         buckets: [],
         endpoint: "",
         region: "",
@@ -187,7 +196,8 @@ export function siyuanRuntimeSource(name: string): DataSource {
     }
     // 思源里存的是不带协议头的 host，查询前统一补全
     const endpoint = normalizeEndpoint(config.endpoint);
-    const provider = detectProvider(endpoint);
+    // 自动识别认错了就用手动指定的那一条，界面上的选择优先于域名
+    const provider = providerOverride ?? detectProvider(endpoint);
     return {
         ...base,
         provider,
@@ -203,7 +213,7 @@ export function siyuanRuntimeSource(name: string): DataSource {
 
 /** 手动数据源原样返回；思源导入那一条按当前同步配置重建。 */
 export function resolveSource(source: DataSource): DataSource {
-    return source.useSyncConfig ? siyuanRuntimeSource(source.name) : source;
+    return source.useSyncConfig ? siyuanRuntimeSource(source.name, source.providerOverride) : source;
 }
 
 /** 字符串字段的归一化：非字符串按空串处理，去首尾空白。 */
@@ -290,7 +300,12 @@ function legacySiyuanName(rawSources: unknown): string | undefined {
 
 function mergeSiyuanImport(rawSiyuan: unknown, rawSources: unknown): StoredSiyuanImport | undefined {
     if (rawSiyuan && typeof rawSiyuan === "object") {
-        return {name: text((rawSiyuan as Record<string, unknown>).name)};
+        const provider = (rawSiyuan as Record<string, unknown>).provider;
+        return {
+            name: text((rawSiyuan as Record<string, unknown>).name),
+            // 只接受已知的服务商 id；其余值一律当作「自动识别」，不把脏数据带进运行时
+            ...(isProviderId(provider) ? {provider} : {}),
+        };
     }
     const legacy = legacySiyuanName(rawSources);
     return legacy === undefined ? undefined : {name: legacy};

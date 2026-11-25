@@ -146,6 +146,28 @@ describe("config", () => {
         }
     });
 
+    it("lets the siyuan entry override the detected provider", () => {
+        const restore = stubSiyuanConfig(S3_SYNC_CONFIG);
+        try {
+            // 默认按 Endpoint 识别
+            expect(siyuanRuntimeSource("自定义名").providerOverride).toBeUndefined();
+            // 手动指定后以手动值为准，重建时也要保留
+            const source = siyuanRuntimeSource("自定义名", "qiniuKodo");
+            expect(source.provider).toBe("qiniuKodo");
+            expect(source.providerOverride).toBe("qiniuKodo");
+            expect(resolveSource(source).provider).toBe("qiniuKodo");
+        } finally {
+            restore();
+        }
+    });
+
+    it("keeps a known provider of the siyuan entry and drops an unknown one", () => {
+        expect(mergeStoredSettings({sources: [], siyuan: {name: "x", provider: "qiniuKodo"}}).siyuan)
+            .toEqual({name: "x", provider: "qiniuKodo"});
+        expect(mergeStoredSettings({sources: [], siyuan: {name: "x", provider: "nope"}}).siyuan)
+            .toEqual({name: "x"});
+    });
+
     it("leaves the siyuan entry empty when SiYuan does not sync to S3", () => {
         const restore = stubSiyuanConfig({sync: {provider: 3, s3: {endpoint: "x", bucket: "y"}}});
         try {

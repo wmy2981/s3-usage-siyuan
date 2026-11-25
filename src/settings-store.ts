@@ -59,7 +59,7 @@ export async function loadSettings(plugin: Plugin): Promise<PluginSettings> {
         sources.push(runtime);
     }
     if (stored.siyuan) {
-        sources.push(siyuanRuntimeSource(stored.siyuan.name));
+        sources.push(siyuanRuntimeSource(stored.siyuan.name, stored.siyuan.provider));
     }
     return {
         version: 1,
@@ -89,6 +89,7 @@ function sameStoredSettings(a: StoredSettings, b: StoredSettings): boolean {
         && a.testTimeoutSeconds === b.testTimeoutSeconds
         && a.refreshMinutes === b.refreshMinutes
         && a.siyuan?.name === b.siyuan?.name
+        && a.siyuan?.provider === b.siyuan?.provider
         && a.sources.length === b.sources.length
         && a.sources.every((source, index) => sameSource(source, b.sources[index]));
 }
@@ -146,7 +147,7 @@ export async function saveSettings(plugin: Plugin, settings: PluginSettings): Pr
         testTimeoutSeconds: next.testTimeoutSeconds,
         refreshMinutes: next.refreshMinutes,
         sources: storedSources,
-        ...(storedSiyuanName === undefined ? {} : {siyuan: {name: storedSiyuanName}}),
+        ...(storedSiyuanName === undefined ? {} : {siyuan: {name: storedSiyuanName, provider: siyuan?.providerOverride}}),
     });
     const response = await plugin.saveData(STORAGE_NAME, stored) as {code?: number; msg?: string} | undefined;
     if (response && typeof response.code === "number" && response.code !== 0) {
@@ -181,8 +182,8 @@ export async function saveSettings(plugin: Plugin, settings: PluginSettings): Pr
                     credentials: persisted.credentials,
                 };
             }),
-            // 思源导入那一条的其余字段是运行时读出来的，按落盘后的名字重建
-            ...(storedSiyuanName === undefined ? [] : [siyuanRuntimeSource(storedSiyuanName)]),
+            // 思源导入那一条的其余字段是运行时读出来的，按落盘后的名字与服务商重建
+            ...(storedSiyuanName === undefined ? [] : [siyuanRuntimeSource(storedSiyuanName, stored.siyuan?.provider)]),
         ],
     };
 }

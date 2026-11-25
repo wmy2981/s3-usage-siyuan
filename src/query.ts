@@ -49,7 +49,7 @@ function effectiveSource(source: DataSource, bucket: string, timeoutSeconds: num
     }
     // 思源导入那一条必须和界面渲染走同一套归一化：补协议头、猜服务商、从 Endpoint 推导地域。
     // 这里若自己再拼一遍，会把已补全的 Endpoint 换回思源里那种不带协议头的裸 host。
-    const resolved = siyuanRuntimeSource(source.name);
+    const resolved = siyuanRuntimeSource(source.name, source.providerOverride);
     if (resolved.buckets.length === 0) {
         throw new QueryError("config", withQueryContext(new Error("SiYuan has no usable S3 sync configuration"), source, bucket, timeoutSeconds));
     }
