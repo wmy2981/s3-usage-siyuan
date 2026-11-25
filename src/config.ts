@@ -194,6 +194,8 @@ export function siyuanRuntimeSource(name: string): DataSource {
         buckets: [config.bucket],
         endpoint,
         region: config.region || regionFromEndpoint(endpoint, provider),
+        // R2 的账号 ID 在 Endpoint 里，其余服务商这一栏没有可推导的值
+        accountId: accountIdFromEndpoint(endpoint, provider),
         accessKey: config.accessKey,
         secretKey: config.secretKey,
     };
@@ -333,42 +335,49 @@ export function mergeStoredSettings(raw: unknown): StoredSettings {
     };
 }
 
+/** Endpoint 的 host 小写形式；不是合法 URL 时返回空串。 */
+function hostOf(endpoint: string): string {
+    try {
+        return new URL(normalizeEndpoint(endpoint)).hostname.toLowerCase();
+    } catch {
+        return "";
+    }
+}
+
+/**
+ * 各家 S3 兼容域名 → 服务商。
+ *
+ * 只收各家的对象存储域名，认不出来的一律按 MinIO / 自建处理。
+ * .amazonaws.com.cn 是中国区独立分区，不能与 .amazonaws.com 合并成一条。
+ */
+const PROVIDER_HOST_SUFFIXES: {suffix: string; provider: ProviderId}[] = [
+    {suffix: ".aliyuncs.com", provider: "aliyunOss"},
+    {suffix: ".myqcloud.com", provider: "tencentCos"},
+    {suffix: ".myhuaweicloud.com", provider: "huaweiObs"},
+    // 欧洲站用独立的 .eu 分区
+    {suffix: ".myhuaweicloud.eu", provider: "huaweiObs"},
+    {suffix: ".volces.com", provider: "volcanoTos"},
+    // 七牛的 S3 兼容域名形如 s3.cn-south-1.qiniucs.com
+    {suffix: ".qiniucs.com", provider: "qiniuKodo"},
+    {suffix: ".r2.cloudflarestorage.com", provider: "cloudflareR2"},
+    {suffix: ".amazonaws.com.cn", provider: "awsS3"},
+    {suffix: ".amazonaws.com", provider: "awsS3"},
+];
+
 /** 从 Endpoint 猜服务商；只用于「导入思源同步配置」和默认值，不改变用户已选的类型。 */
 export function detectProvider(endpoint: string): ProviderId {
-    const host = (() => {
-        try {
-            return new URL(normalizeEndpoint(endpoint)).hostname.toLowerCase();
-        } catch {
-            return "";
+    const host = hostOf(endpoint);
+    for (const entry of PROVIDER_HOST_SUFFIXES) {
+        if (host.endsWith(entry.suffix)) {
+            return entry.provider;
         }
-    })();
-    if (host.endsWith(".aliyuncs.com")) {
-        return "aliyunOss";
-    }
-    if (host.endsWith(".myqcloud.com")) {
-        return "tencentCos";
-    }
-    if (host.endsWith(".myhuaweicloud.com")) {
-        return "huaweiObs";
-    }
-    if (host.endsWith(".volces.com")) {
-        return "volcanoTos";
-    }
-    if (host.endsWith(".amazonaws.com")) {
-        return "awsS3";
     }
     return "minio";
 }
 
 /** 从 OSS/COS 等 Endpoint 推导地域，尽力而为；失败时返回空串，由用户手填。 */
 export function regionFromEndpoint(endpoint: string, provider: ProviderId): string {
-    const host = (() => {
-        try {
-            return new URL(normalizeEndpoint(endpoint)).hostname.toLowerCase();
-        } catch {
-            return "";
-        }
-    })();
+    const host = hostOf(endpoint);
     if (provider === "aliyunOss") {
         const match = /^oss-([a-z0-9-]+)\.aliyuncs\.com$/.exec(host);
         return match?.[1] ?? "";
@@ -382,10 +391,30 @@ export function regionFromEndpoint(endpoint: string, provider: ProviderId): stri
         return match?.[1] ?? "";
     }
     if (provider === "huaweiObs") {
-        const match = /^obs\.([a-z0-9-]+)\.myhuaweicloud\.com$/.exec(host);
+        const match = /^obs\.([a-z0-9-]+)\.myhuaweicloud\.(?:com|eu)$/.exec(host);
+        return match?.[1] ?? "";
+    }
+    if (provider === "qiniuKodo") {
+        const match = /^s3\.([a-z0-9-]+)\.qiniucs\.com$/.exec(host);
+        return match?.[1] ?? "";
+    }
+    if (provider === "awsS3") {
+        const match = /^s3\.([a-z0-9-]+)\.amazonaws\.com(?:\.cn)?$/.exec(host);
         return match?.[1] ?? "";
     }
     return "";
+}
+
+/**
+ * Cloudflare R2 的 S3 Endpoint 是「账号 ID.r2.cloudflarestorage.com」，
+ * 账号 ID 直接写在域名里，导入时不必让用户再填一次。
+ */
+export function accountIdFromEndpoint(endpoint: string, provider: ProviderId): string {
+    if (provider !== "cloudflareR2") {
+        return "";
+    }
+    const match = /^([0-9a-f]{32})\.r2\.cloudflarestorage\.com$/.exec(hostOf(endpoint));
+    return match?.[1] ?? "";
 }
 
 /** 创建数据源时的稳定 id：随机 + 时间，卸载重装也不会撞。 */

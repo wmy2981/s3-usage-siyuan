@@ -39,6 +39,35 @@ const SPECS: StatSpec[] = [
     {path: "/v6/count_intelligent_tiering", key: "intelligent", name: "INTELLIGENT_TIERING", kind: "count"},
 ];
 
+/**
+ * 计量接口的 region 参数要的是七牛自己的区域 ID（z0/z1/z2、na0、as0 与新建区域的 cn-*），
+ * 和 S3 域名里的区域简称不是一套：从思源导入时拿到的是 cn-south-1 这类简称，
+ * 直接透传会被判成非法区域。这里换成对应的区域 ID，换不出来的干脆不传，
+ * 让接口按桶返回全部区域的数据。
+ */
+const KODO_REGION_ALIASES: Record<string, string> = {
+    "cn-east-1": "z0",
+    "cn-north-1": "z1",
+    "cn-south-1": "z2",
+    "us-north-1": "na0",
+    "ap-southeast-1": "as0",
+};
+
+/** 本来就是区域 ID 的值原样使用。 */
+const KODO_REGION_IDS = ["z0", "z1", "z2", "na0", "as0", "cn-east-2", "ap-southeast-2", "ap-southeast-3"];
+
+export function kodoRegion(region: string): string {
+    const value = region.trim().toLowerCase();
+    if (value === "") {
+        return "";
+    }
+    const alias = KODO_REGION_ALIASES[value];
+    if (alias !== undefined) {
+        return alias;
+    }
+    return KODO_REGION_IDS.includes(value) ? value : "";
+}
+
 /** 七牛的 begin/end 是东八区的 14 位时间串，不能直接拿本机时区格式化。 */
 export function qiniuTime(date: Date): string {
     const beijing = new Date(date.getTime() + 8 * 60 * 60 * 1000);
@@ -105,11 +134,24 @@ function latestValue(body: string): StatValue {
     return latest;
 }
 
+/** 七牛的 S3 兼容域名（s3.cn-south-1.qiniucs.com 等）只是数据面，计量接口不在上面。 */
+function isS3DataHost(endpoint: string): boolean {
+    try {
+        return new URL(endpoint).hostname.toLowerCase().endsWith(".qiniucs.com");
+    } catch {
+        return false;
+    }
+}
+
 function endpointFor(source: Parameters<ProviderDefinition["query"]>[0]["source"]): string {
     if (source.endpoint.trim() !== "") {
         // 自定义 Endpoint 走与其他服务商一致的归一化：表单允许只填裸 host，
         // 原样拼进 URL 会让 new URL() 直接抛 TypeError
-        return requireEndpoint(source);
+        const endpoint = requireEndpoint(source);
+        // 从思源导入时 Endpoint 就是 S3 域名，拿它拼 /v6/* 一定 404，仍走计量接口的默认域名
+        if (!isS3DataHost(endpoint)) {
+            return endpoint;
+        }
     }
     if (source.region === "ap-southeast-2") {
         return "https://api-ap-southeast-2.qiniuapi.com";
@@ -163,8 +205,9 @@ async function queryStat(
         end: qiniuTime(end),
         g: "day",
     });
-    if (ctx.source.region.trim() !== "") {
-        params.set("region", ctx.source.region.trim());
+    const region = kodoRegion(ctx.source.region);
+    if (region !== "") {
+        params.set("region", region);
     }
     return latestValue(await requestQiniu(ctx, spec.path, params, endpoint));
 }
@@ -197,7 +240,7 @@ async function queryTraffic(
 ): Promise<{trafficOutBytes?: number; requestCount?: number}> {
     const begin = qiniuTime(new Date(Date.now() - MONITOR_WINDOW_MS));
     const end = qiniuTime(new Date());
-    const region = ctx.source.region.trim();
+    const region = kodoRegion(ctx.source.region);
     const call = async (path: string, select: string, metric: string | undefined, field: string) => {
         const params = new URLSearchParams({begin, end, g: "hour", select});
         if (metric !== undefined) {

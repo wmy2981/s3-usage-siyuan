@@ -1,5 +1,6 @@
 import {describe, expect, it} from "vitest";
 import {
+    accountIdFromEndpoint,
     detectProvider,
     mergeStoredSettings,
     normalizeEndpoint,
@@ -54,9 +55,18 @@ describe("config", () => {
         expect(detectProvider("https://oss-cn-hangzhou.aliyuncs.com")).toBe("aliyunOss");
         expect(detectProvider("https://cos.ap-guangzhou.myqcloud.com")).toBe("tencentCos");
         expect(detectProvider("https://obs.cn-north-4.myhuaweicloud.com")).toBe("huaweiObs");
+        // 华为云欧洲站是独立的 .eu 分区
+        expect(detectProvider("https://obs.eu-west-101.myhuaweicloud.eu")).toBe("huaweiObs");
         expect(detectProvider("https://tos-cn-beijing.volces.com")).toBe("volcanoTos");
+        // 七牛的 S3 兼容域名（思源里就是这一条）
+        expect(detectProvider("https://s3.cn-south-1.qiniucs.com")).toBe("qiniuKodo");
+        expect(detectProvider("s3.qiniucs.com")).toBe("qiniuKodo");
+        expect(detectProvider("https://023e105f4ecef8ad9ca31a8372d0c353.r2.cloudflarestorage.com")).toBe("cloudflareR2");
         expect(detectProvider("https://s3.us-east-1.amazonaws.com")).toBe("awsS3");
+        // AWS 中国区是 amazonaws.com.cn 分区
+        expect(detectProvider("https://s3.cn-north-1.amazonaws.com.cn")).toBe("awsS3");
         expect(detectProvider("http://127.0.0.1:9000")).toBe("minio");
+        expect(detectProvider("https://minio.example.com")).toBe("minio");
     });
 
     it("derives regions from standard endpoints", () => {
@@ -64,6 +74,18 @@ describe("config", () => {
         expect(regionFromEndpoint("https://tos-cn-beijing.volces.com", "volcanoTos")).toBe("cn-beijing");
         expect(regionFromEndpoint("https://cos.ap-guangzhou.myqcloud.com", "tencentCos")).toBe("ap-guangzhou");
         expect(regionFromEndpoint("https://obs.cn-north-4.myhuaweicloud.com", "huaweiObs")).toBe("cn-north-4");
+        expect(regionFromEndpoint("https://obs.eu-west-101.myhuaweicloud.eu", "huaweiObs")).toBe("eu-west-101");
+        expect(regionFromEndpoint("https://s3.cn-south-1.qiniucs.com", "qiniuKodo")).toBe("cn-south-1");
+        expect(regionFromEndpoint("https://s3.qiniucs.com", "qiniuKodo")).toBe("");
+        expect(regionFromEndpoint("https://s3.cn-north-1.amazonaws.com.cn", "awsS3")).toBe("cn-north-1");
+        expect(regionFromEndpoint("https://s3.eu-west-1.amazonaws.com", "awsS3")).toBe("eu-west-1");
+    });
+
+    it("reads the Cloudflare account id out of the R2 endpoint", () => {
+        const endpoint = "https://023e105f4ecef8ad9ca31a8372d0c353.r2.cloudflarestorage.com";
+        expect(accountIdFromEndpoint(endpoint, "cloudflareR2")).toBe("023e105f4ecef8ad9ca31a8372d0c353");
+        expect(accountIdFromEndpoint(endpoint, "minio")).toBe("");
+        expect(accountIdFromEndpoint("https://minio.example.com", "cloudflareR2")).toBe("");
     });
 
     it("drops invalid sources and clamps the timeout", () => {

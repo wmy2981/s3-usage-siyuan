@@ -3,7 +3,7 @@ import {createHash, createHmac} from "node:crypto";
 import type {DataSource} from "../src/config";
 import {awsS3} from "../src/providers/aws-s3";
 import {cloudflareR2} from "../src/providers/cloudflare-r2";
-import {qiniuKodo} from "../src/providers/qiniu-kodo";
+import {kodoRegion, qiniuKodo} from "../src/providers/qiniu-kodo";
 import {volcanoTos} from "../src/providers/volcano-tos";
 import {tencentCos} from "../src/providers/tencent-cos";
 import type {ForwardRequest} from "../src/providers/types";
@@ -169,6 +169,45 @@ describe("Qiniu Kodo endpoint handling", () => {
         for (const url of urls) {
             expect(url.startsWith("https://api.qiniuapi.com/v6/")).toBe(true);
         }
+    });
+
+    /** 只收集 URL，不关心响应内容。 */
+    async function urlsFor(region: string): Promise<string[]> {
+        const urls: string[] = [];
+        await qiniuKodo.query({
+            source: {...qiniuSource("https://s3.cn-south-1.qiniucs.com"), region}, bucket: "photos", timeoutMs: 5000,
+            request: async (request) => {
+                urls.push(request.url);
+                return {status: 200, body: JSON.stringify({times: [1700000000], datas: [1024]}), headers: null};
+            },
+        });
+        return urls;
+    }
+
+    it("translates the S3 region code into a Kodo region id", async () => {
+        expect(kodoRegion("cn-south-1")).toBe("z2");
+        expect(kodoRegion("cn-east-1")).toBe("z0");
+        expect(kodoRegion("z1")).toBe("z1");
+        expect(kodoRegion("cn-west-1")).toBe("");
+        for (const url of await urlsFor("cn-south-1")) {
+            expect(url).toContain("region=z2");
+        }
+    });
+
+    it("leaves the region out when it is not a Kodo region id", async () => {
+        for (const url of await urlsFor("cn-west-1")) {
+            expect(url).not.toContain("region=");
+        }
+    });
+
+    it("keeps the management API when the form holds the S3 data endpoint", async () => {
+        // 从思源导入时 Endpoint 是 S3 域名，计量接口不能拼在它上面
+        const {urls, usage} = await run("https://s3.cn-south-1.qiniucs.com");
+        expect(urls).not.toHaveLength(0);
+        for (const url of urls) {
+            expect(url.startsWith("https://api.qiniuapi.com/v6/")).toBe(true);
+        }
+        expect(usage.storageBytes).toBe(6 * 1024);
     });
 });
 
