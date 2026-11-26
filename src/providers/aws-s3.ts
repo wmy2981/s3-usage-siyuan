@@ -127,8 +127,10 @@ async function requestMetric(
 ): Promise<string> {
     const region = requireRegion(ctx.source);
     const url = monitoringUrl(region);
-    const end = alignToPeriod(new Date(), query.periodSeconds);
-    const start = new Date(end.getTime() - query.windowMs);
+    const alignedEnd = alignToPeriod(new Date(), query.periodSeconds);
+    // CloudWatch 的 EndTime 是排他边界；日指标正好发布在 00:00Z，向后移 1 秒才能包含当天快照。
+    const end = query.periodSeconds === 86400 ? new Date(alignedEnd.getTime() + 1000) : alignedEnd;
+    const start = new Date(alignedEnd.getTime() - query.windowMs);
     const params = new URLSearchParams({
         Action: "GetMetricStatistics",
         Version: "2010-08-01",

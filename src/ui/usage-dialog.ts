@@ -116,7 +116,7 @@ export class UsageDialog {
             this.editing = undefined;
             this.adding = view === "sources" && this.settings.sources.length === 0;
             this.render();
-            if (view === "usage" && this.results.size === 0) {
+            if (view === "usage" && this.hasIncompleteResults()) {
                 void this.refreshAll();
             }
             this.tick();
@@ -168,7 +168,7 @@ export class UsageDialog {
         this.renderedView = undefined;
         this.startTimer();
         // 入场前就把每张卡片搭成骨架，查询结果只替换单张卡片，避免入场期间重排整棵正文
-        const needsQuery = this.view === "usage" && this.results.size === 0;
+        const needsQuery = this.view === "usage" && this.hasIncompleteResults();
         if (needsQuery) {
             this.prepareLoading();
         }
@@ -346,6 +346,19 @@ export class UsageDialog {
         if (this.autoRefreshDue(Date.now())) {
             void this.refreshAll();
         }
+    }
+
+    /** 已完成的结果可以复用；关闭时丢弃的在途条目必须在重开后补查。 */
+    private hasIncompleteResults(): boolean {
+        for (const source of this.settings.sources) {
+            for (const bucket of source.buckets) {
+                const result = this.results.get(this.cardKey(source, bucket));
+                if (!result || result.state === "loading") {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private autoRefreshDue(now: number): boolean {
@@ -680,7 +693,7 @@ export class UsageDialog {
             this.adding = false;
             this.view = "usage";
             this.render();
-            if (this.results.size === 0) {
+            if (this.hasIncompleteResults()) {
                 void this.refreshAll();
             }
         });

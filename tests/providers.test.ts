@@ -1,4 +1,4 @@
-import {describe, expect, it} from "vitest";
+import {describe, expect, it, vi} from "vitest";
 import {createHash, createHmac} from "node:crypto";
 import type {DataSource} from "../src/config";
 import {awsS3} from "../src/providers/aws-s3";
@@ -297,11 +297,55 @@ describe("AWS S3 CloudWatch requests", () => {
                 expect(params.get("Action")).toBe("ListMetrics");
                 continue;
             }
-            for (const field of ["StartTime", "EndTime"]) {
-                const time = Date.parse(params.get(field) ?? "");
-                expect(Number.isFinite(time)).toBe(true);
-                expect(time % (period * 1000)).toBe(0);
-            }
+            const start = Date.parse(params.get("StartTime") ?? "");
+            const end = Date.parse(params.get("EndTime") ?? "");
+            expect(Number.isFinite(start)).toBe(true);
+            expect(Number.isFinite(end)).toBe(true);
+            expect(start % (period * 1000)).toBe(0);
+            // 日指标的 EndTime 比周期边界多 1 秒，避免排他边界漏掉 00:00Z 快照
+            expect((end - (period === 86400 ? 1000 : 0)) % (period * 1000)).toBe(0);
+        }
+    });
+
+    it("includes the daily snapshot published at the exclusive end boundary", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-11-26T12:34:56Z"));
+        const timestamp = "2026-11-26T00:00:00Z";
+        try {
+            const usage = await awsS3.query({
+                source: {
+                    id: "aws", name: "aws", provider: "awsS3", buckets: ["photos"], endpoint: "",
+                    region: "us-east-1", accountId: "", useSyncConfig: false,
+                    accessKey: "AKIDEXAMPLE", secretKey: "SECRETEXAMPLE",
+                    credentialsError: false, credentialsErrorReason: "",
+                },
+                bucket: "photos", timeoutMs: 5000,
+                request: async (request) => {
+                    const params = new URLSearchParams(request.body ?? "");
+                    if (params.get("Action") === "ListMetrics") {
+                        return {status: 200, headers: null,
+                            body: "<ListMetricsResponse><ListMetricsResult><Metrics/></ListMetricsResult></ListMetricsResponse>"};
+                    }
+                    const metricName = params.get("MetricName");
+                    const storageType = params.get("Dimensions.member.2.Value");
+                    const value = metricName === "NumberOfObjects"
+                        ? 7
+                        : metricName === "BucketSizeBytes" && storageType === "StandardStorage" ? 42 : undefined;
+                    const included = value !== undefined
+                        && Date.parse(timestamp) >= Date.parse(params.get("StartTime") ?? "")
+                        && Date.parse(timestamp) < Date.parse(params.get("EndTime") ?? "");
+                    const datapoints = included
+                        ? `<Datapoints><member><Timestamp>${timestamp}</Timestamp><Average>${value}</Average></member></Datapoints>`
+                        : "<Datapoints/>";
+                    return {status: 200, headers: null,
+                        body: `<GetMetricStatisticsResponse><GetMetricStatisticsResult>${datapoints}</GetMetricStatisticsResult></GetMetricStatisticsResponse>`};
+                },
+            });
+            expect(usage.storageBytes).toBe(42);
+            expect(usage.objectCount).toBe(7);
+            expect(usage.dataTime).toBe(Date.parse(timestamp));
+        } finally {
+            vi.useRealTimers();
         }
     });
 });
